@@ -51,6 +51,7 @@ import { useEffect } from "react";
 import { getAllMedicines, saveMedicineDB } from "./db";
 import { v4 as uuidv4 } from "uuid";
 import { syncMedicines } from "./sync";
+import RefreshIcon from "@mui/icons-material/Refresh";
 // ─── Theme ───────────────────────────────────────────────────────────────────
 
 const theme = createTheme({
@@ -178,88 +179,7 @@ const TYPE_CONFIG = {
     bg: "rgba(148,163,184,0.12)",
   },
 };
-// const SAMPLE_MEDICINES = [
-//   {
-//     id: 1,
-//     name: "Amoxicillin 500mg",
-//     type: "Tablets",
-//     qty: 240,
-//     costPrice: 12.5,
-//     sellPrice: 18.0,
-//     company: "PharmaCo",
-//     expDate: "2026-08",
-//   },
-//   {
-//     id: 2,
-//     name: "Paracetamol Syrup",
-//     type: "Syrup",
-//     qty: 48,
-//     costPrice: 6.0,
-//     sellPrice: 9.5,
-//     company: "MediLab",
-//     expDate: "2025-12",
-//   },
-//   {
-//     id: 3,
-//     name: "Betamethasone Cream",
-//     type: "Ointment",
-//     qty: 30,
-//     costPrice: 15.0,
-//     sellPrice: 22.0,
-//     company: "DermaCare",
-//     expDate: "2026-03",
-//   },
-//   {
-//     id: 4,
-//     name: "Ciprofloxacin 250mg",
-//     type: "Tablets",
-//     qty: 120,
-//     costPrice: 20.0,
-//     sellPrice: 30.0,
-//     company: "BioPharm",
-//     expDate: "2026-11",
-//   },
-//   {
-//     id: 5,
-//     name: "Vitamin D3 Drops",
-//     type: "Drops",
-//     qty: 60,
-//     costPrice: 8.0,
-//     sellPrice: 13.5,
-//     company: "NutriLab",
-//     expDate: "2026-06",
-//   },
-//   {
-//     id: 6,
-//     name: "Metoclopramide Ampoule",
-//     type: "Ampoule",
-//     qty: 20,
-//     costPrice: 25.0,
-//     sellPrice: 38.0,
-//     company: "InjectaMed",
-//     expDate: "2025-09",
-//   },
-//   {
-//     id: 7,
-//     name: "Ibuprofen 400mg",
-//     type: "Tablets",
-//     qty: 180,
-//     costPrice: 10.0,
-//     sellPrice: 15.0,
-//     company: "PharmaCo",
-//     expDate: "2027-01",
-//   },
-//   {
-//     id: 8,
-//     name: "Azithromycin Syrup",
-//     type: "Syrup",
-//     qty: 36,
-//     costPrice: 14.0,
-//     sellPrice: 21.0,
-//     company: "MediLab",
-//     expDate: "2026-05",
-//   },
-// ];
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const getTypeConfig = (type) =>
@@ -270,8 +190,8 @@ const getTypeConfig = (type) =>
   };
 
 const getLowStockStatus = (qty) => {
-  if (qty <= 20) return { label: "Low Stock", color: "error" };
-  if (qty <= 50) return { label: "Limited", color: "warning" };
+  if (qty <= 5) return { label: "Low Stock", color: "error" };
+  if (qty <= 10) return { label: "Limited", color: "warning" };
   return null;
 };
 
@@ -298,6 +218,7 @@ function MedicineFormDialog({ open, onClose, onSave, initial }) {
   const handleSave = () => {
     if (valid) {
       onSave(form);
+      setForm(EMPTY_FORM);
       onClose();
     }
   };
@@ -514,12 +435,12 @@ function MedicineDetailsDialog({ open, onClose, medicine, onEdit, onDelete }) {
             },
             {
               label: "Cost Price",
-              value: `$${medicine.costPrice.toFixed(2)}`,
+              value: `ILS ${medicine.costPrice.toFixed(2)}`,
               icon: <MoneyIcon sx={{ fontSize: 16 }} />,
             },
             {
-              label: "Sell Price",
-              value: `$${medicine.sellPrice.toFixed(2)}`,
+              label: "Sell Pri.ce",
+              value: `ILS ${medicine.sellPrice.toFixed(2)}`,
               icon: <MoneyIcon sx={{ fontSize: 16 }} />,
             },
           ].map((item) => (
@@ -700,7 +621,7 @@ function MedicineCard({ medicine, onClick }) {
                     flexShrink: 0,
                   }}
                 >
-                  ${medicine.sellPrice.toFixed(2)}
+                  ILS {medicine.sellPrice.toFixed(2)}
                 </Typography>
               </Box>
               <Box
@@ -779,6 +700,39 @@ export default function App() {
   const [addOpen, setAddOpen] = useState(false);
   const [detailMed, setDetailMed] = useState(null);
   const [editMed, setEditMed] = useState(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      if (navigator.onLine) {
+        await syncMedicines();
+      }
+
+      const freshData = await getAllMedicines();
+      setMedicines(freshData.filter((m) => !m.deleted));
+
+      console.log("تم تحديث البيانات بنجاح يدوياً!");
+    } catch (error) {
+      console.error("فشل التحديث اليدوي للبيانات", error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    const handleOnlineStatus = () => setIsOnline(true);
+    const handleOfflineStatus = () => setIsOnline(false);
+
+    window.addEventListener("online", handleOnlineStatus);
+    window.addEventListener("offline", handleOfflineStatus);
+
+    return () => {
+      window.removeEventListener("online", handleOnlineStatus);
+      window.removeEventListener("offline", handleOfflineStatus);
+    };
+  }, []);
 
   useEffect(() => {
     const loadData = async () => {
@@ -929,20 +883,21 @@ export default function App() {
             borderBottom: "1px solid rgba(148,163,184,0.08)",
           }}
         >
-          <Toolbar sx={{ px: { xs: 2, sm: 3 } }}>
+          <Toolbar sx={{ px: { xs: 2, sm: 3 }, gap: 1 }}>
             <Avatar
               sx={{
                 bgcolor: "rgba(37,99,235,0.15)",
                 color: "primary.light",
                 borderRadius: "12px",
-                mr: 1.5,
                 width: 38,
                 height: 38,
               }}
             >
               <PharmacyIcon sx={{ fontSize: 20 }} />
             </Avatar>
-            <Box>
+
+            <Box sx={{ mr: "auto" }}>
+              {" "}
               <Typography
                 variant="h6"
                 sx={{ fontSize: { xs: 16, sm: 18 }, lineHeight: 1.2 }}
@@ -956,7 +911,67 @@ export default function App() {
                 Inventory Management
               </Typography>
             </Box>
-            <Box sx={{ flex: 1 }} />
+
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: 0.8,
+                bgcolor: isOnline
+                  ? "rgba(34,197,94,0.1)"
+                  : "rgba(239,68,68,0.1)",
+                color: isOnline ? "#4ade80" : "#f87171",
+                px: 1.2,
+                py: 0.5,
+                borderRadius: "20px",
+                border: `1px solid ${isOnline ? "rgba(34,197,94,0.2)" : "rgba(239,68,68,0.2)"}`,
+                fontSize: { xs: 11, sm: 12 },
+                fontWeight: 500,
+              }}
+            >
+              {/* النقطة المضيئة */}
+              <Box
+                sx={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: "50%",
+                  bgcolor: isOnline ? "#22c55e" : "#ef4444",
+                  // تأثير نبض خفيف للنقطة عشان يعطي حيوية
+                  animation: "pulse 2s infinite",
+                  "@keyframes pulse": {
+                    "0%": { transform: "scale(0.95)", opacity: 0.7 },
+                    "50%": { transform: "scale(1.1)", opacity: 1 },
+                    "100%": { transform: "scale(0.95)", opacity: 0.7 },
+                  },
+                }}
+              />
+              {/* الكلمة (تختفي في الشاشات الصغيرة جداً للمحافظة على المساحة) */}
+              <Box
+                component="span"
+                sx={{ display: { xs: "none", sm: "inline" } }}
+              >
+                {isOnline ? "Connected" : "Disconnected"}
+              </Box>
+            </Box>
+
+            <IconButton
+              onClick={handleManualRefresh}
+              disabled={isRefreshing}
+              size="small"
+              sx={{
+                color: "primary.light",
+                bgcolor: "rgba(255,255,255,0.03)",
+                "&:hover": { bgcolor: "rgba(255,255,255,0.08)" },
+                "@keyframes spin": {
+                  "0%": { transform: "rotate(0deg)" },
+                  "100%": { transform: "rotate(360deg)" },
+                },
+                animation: isRefreshing ? "spin 1s linear infinite" : "none",
+              }}
+            >
+              <RefreshIcon sx={{ fontSize: 20 }} />
+            </IconButton>
+
             <Chip
               label={`${medicines.length} items`}
               size="small"

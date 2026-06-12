@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">yahya-pharmacy</string>
+    <string name="title_activity_main">yahya-pharmacy</string>
+    <string name="package_name">com.yaser.pharmacy</string>
+    <string name="custom_url_scheme">com.yaser.pharmacy</string>
+</resources>
