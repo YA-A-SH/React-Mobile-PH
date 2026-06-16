@@ -28,6 +28,8 @@ import {
   Slide,
   Fade,
   Avatar,
+  CircularProgress,
+  Backdrop,
 } from "@mui/material";
 import {
   Search as SearchIcon,
@@ -46,6 +48,19 @@ import {
   AttachMoney as MoneyIcon,
   Inventory2 as InventoryIcon,
   MedicalServices,
+  ArrowRight,
+  LocalPharmacy,
+  Liquor,
+  WaterDrop,
+  Healing,
+  Colorize,
+  Opacity,
+  Sort,
+  ArrowDownward,
+  ArrowUpward,
+  Edit,
+  Remove,
+  Delete,
 } from "@mui/icons-material";
 import { useEffect } from "react";
 import { getAllMedicines, saveMedicineDB } from "./db";
@@ -145,49 +160,64 @@ const MEDICINE_TYPES = [
   "All",
   "Tablets",
   "Syrup",
-  "Ointment",
   "Drops",
   "Ampoule",
+  "Cream",
+  "Oint",
+  "Emulgel",
   "Others",
 ];
 
 const TYPE_CONFIG = {
   Tablets: {
-    icon: <MedicationIcon />,
-    color: "#2563EB",
-    bg: "rgba(37,99,235,0.12)",
+    icon: <LocalPharmacy fontSize="small" />,
+    color: "#3B82F6",
+    bg: "rgba(59, 130, 246, 0.1)",
   },
   Syrup: {
-    icon: <ScienceIcon />,
+    icon: <Liquor fontSize="small" />,
     color: "#10B981",
-    bg: "rgba(16,185,129,0.12)",
+    bg: "rgba(16, 185, 129, 0.1)",
   },
-  Ointment: {
-    icon: <MedicalIcon />,
-    color: "#F59E0B",
-    bg: "rgba(245,158,11,0.12)",
+  Drops: {
+    icon: <WaterDrop fontSize="small" />,
+    color: "#06B6D4",
+    bg: "rgba(6, 182, 212, 0.1)",
   },
-  Drops: { icon: <DropsIcon />, color: "#8B5CF6", bg: "rgba(139,92,246,0.12)" },
   Ampoule: {
-    icon: <VaccinesIcon />,
-    color: "#EF4444",
-    bg: "rgba(239,68,68,0.12)",
+    icon: <VaccinesIcon fontSize="small" />,
+    color: "#8B5CF6",
+    bg: "rgba(139, 92, 246, 0.1)",
   },
+
+  Cream: {
+    icon: <Healing fontSize="small" />,
+    color: "#EC4899",
+    bg: "rgba(236, 72, 153, 0.1)",
+  },
+  Oint: {
+    icon: <Colorize fontSize="small" />,
+    color: "#F59E0B",
+    bg: "rgba(245, 158, 11, 0.1)",
+  },
+  Emulgel: {
+    icon: <Opacity fontSize="small" />,
+    color: "#14B8A6",
+    bg: "rgba(20, 184, 166, 0.1)",
+  },
+
   Others: {
-    icon: <MedicalServices />,
-    color: "#94A3B8",
-    bg: "rgba(148,163,184,0.12)",
+    icon: <MedicationIcon fontSize="small" />,
+    color: "#64748B",
+    bg: "rgba(100, 116, 139, 0.1)",
   },
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const getTypeConfig = (type) =>
-  TYPE_CONFIG[type] || {
-    icon: <PharmacyIcon />,
-    color: "#94A3B8",
-    bg: "rgba(148,163,184,0.12)",
-  };
+const getTypeConfig = (type) => {
+  return TYPE_CONFIG[type] || TYPE_CONFIG.Others;
+};
 
 const getLowStockStatus = (qty) => {
   if (qty <= 5) return { label: "Low Stock", color: "error" };
@@ -204,6 +234,7 @@ const EMPTY_FORM = {
   costPrice: "",
   sellPrice: "",
   company: "",
+  location: "معروض",
   expDate: "",
 };
 
@@ -222,6 +253,10 @@ function MedicineFormDialog({ open, onClose, onSave, initial }) {
       onClose();
     }
   };
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setForm(initial || EMPTY_FORM);
+  }, [initial, open]);
 
   return (
     <Dialog
@@ -321,6 +356,20 @@ function MedicineFormDialog({ open, onClose, onSave, initial }) {
             }}
           />
         </Box>
+
+        <FormControl fullWidth size="small">
+          <InputLabel>Location</InputLabel>
+
+          <Select
+            value={form.location || "معروض"}
+            label="Location"
+            onChange={set("location")}
+          >
+            <MenuItem value="معروض">معروض</MenuItem>
+
+            <MenuItem value="مخزون">مخزون</MenuItem>
+          </Select>
+        </FormControl>
         <TextField
           label="Company Name"
           value={form.company}
@@ -361,7 +410,14 @@ function MedicineFormDialog({ open, onClose, onSave, initial }) {
 
 // ─── Details Dialog ───────────────────────────────────────────────────────────
 
-function MedicineDetailsDialog({ open, onClose, medicine, onEdit, onDelete }) {
+function MedicineDetailsDialog({
+  open,
+  onClose,
+  medicine,
+  onEdit,
+  onDelete,
+  onDecreaseQty,
+}) {
   if (!medicine) return null;
   const cfg = getTypeConfig(medicine.type);
   const stock = getLowStockStatus(medicine.qty);
@@ -434,12 +490,12 @@ function MedicineDetailsDialog({ open, onClose, medicine, onEdit, onDelete }) {
               icon: <InventoryIcon sx={{ fontSize: 16 }} />,
             },
             {
-              label: "Cost Price",
+              label: "Cost",
               value: `ILS ${medicine.costPrice.toFixed(2)}`,
               icon: <MoneyIcon sx={{ fontSize: 16 }} />,
             },
             {
-              label: "Sell Pri.ce",
+              label: "Sell",
               value: `ILS ${medicine.sellPrice.toFixed(2)}`,
               icon: <MoneyIcon sx={{ fontSize: 16 }} />,
             },
@@ -532,30 +588,59 @@ function MedicineDetailsDialog({ open, onClose, medicine, onEdit, onDelete }) {
         </Box>
       </DialogContent>
       <Divider sx={{ borderColor: "divider" }} />
-      <DialogActions sx={{ px: 3, pb: 3, pt: 1.5, gap: 1 }}>
-        <Button
-          onClick={() => {
-            onDelete(medicine.id);
-            onClose();
-          }}
-          variant="outlined"
-          color="error"
-          startIcon={<DeleteIcon />}
-          sx={{ flex: 1 }}
-        >
-          Delete
-        </Button>
+      <DialogActions
+        sx={{
+          px: 3,
+          pb: 3,
+          pt: 2,
+          flexDirection: "column",
+          gap: 1.2,
+        }}
+      >
         <Button
           onClick={() => {
             onEdit(medicine);
             onClose();
           }}
           variant="contained"
-          startIcon={<EditIcon />}
-          sx={{ flex: 2 }}
+          startIcon={<Edit />}
+          fullWidth
+          size="large"
         >
-          Edit
+          Edit Medicine
         </Button>
+
+        <Box
+          sx={{
+            width: "100%",
+            display: "flex",
+            gap: 1,
+          }}
+        >
+          <Button
+            onClick={() => onDecreaseQty(medicine)}
+            variant="outlined"
+            color="warning"
+            disabled={medicine.qty <= 0}
+            startIcon={<Remove />}
+            sx={{ flex: 1 }}
+          >
+            Qty -1
+          </Button>
+
+          <Button
+            onClick={() => {
+              onDelete(medicine.id);
+              onClose();
+            }}
+            variant="outlined"
+            color="error"
+            startIcon={<Delete />}
+            sx={{ flex: 1 }}
+          >
+            Delete
+          </Button>
+        </Box>
       </DialogActions>
     </Dialog>
   );
@@ -564,12 +649,66 @@ function MedicineDetailsDialog({ open, onClose, medicine, onEdit, onDelete }) {
 // ─── Medicine Card ────────────────────────────────────────────────────────────
 
 function MedicineCard({ medicine, onClick }) {
+  console.table({
+    name: medicine.name,
+    company: medicine.company,
+    location: medicine.location,
+  });
+  const locationCfg =
+    medicine.location === "مخزون"
+      ? {
+          label: "مخزون",
+          color: "#F59E0B",
+          bg: "rgba(245,158,11,0.12)",
+          border: "rgba(245,158,11,0.25)",
+        }
+      : {
+          label: "معروض",
+          color: "#10B981",
+          bg: "rgba(16,185,129,0.12)",
+          border: "rgba(16,185,129,0.25)",
+        };
   const cfg = getTypeConfig(medicine.type);
   const stock = getLowStockStatus(medicine.qty);
 
   return (
     <Fade in timeout={300}>
-      <Card elevation={0}>
+      <Card
+        elevation={0}
+        sx={{
+          position: "relative",
+          overflow: "hidden",
+
+          bgcolor:
+            medicine.location === "مخزون"
+              ? "rgba(245,158,11,0.03)"
+              : "rgba(16,185,129,0.03)",
+
+          border:
+            medicine.location === "مخزون"
+              ? "1px solid rgba(245,158,11,0.12)"
+              : "1px solid rgba(16,185,129,0.12)",
+
+          "&:hover": {
+            transform: "translateY(-2px)",
+            boxShadow:
+              medicine.location === "مخزون"
+                ? "0 8px 25px rgba(245,158,11,0.12)"
+                : "0 8px 25px rgba(16,185,129,0.12)",
+          },
+
+          "&::before": {
+            content: '""',
+            position: "absolute",
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: 4,
+            bgcolor: medicine.location === "مخزون" ? "#F59E0B" : "#10B981",
+          },
+        }}
+      >
+        {" "}
         <CardActionArea onClick={() => onClick(medicine)} sx={{ p: 0 }}>
           <CardContent
             sx={{
@@ -591,6 +730,7 @@ function MedicineCard({ medicine, onClick }) {
             >
               {cfg.icon}
             </Avatar>
+
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Box
                 sx={{
@@ -624,37 +764,94 @@ function MedicineCard({ medicine, onClick }) {
                   ILS {medicine.sellPrice.toFixed(2)}
                 </Typography>
               </Box>
+
               <Box
-                sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.5 }}
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  mt: 1,
+                }}
               >
-                <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                  {medicine.type}
-                </Typography>
-                {medicine.company && (
-                  <>
-                    <Box
-                      sx={{
-                        width: 3,
-                        height: 3,
-                        borderRadius: "50%",
-                        bgcolor: "text.secondary",
-                        opacity: 0.4,
-                      }}
-                    />
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        color: "text.secondary",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {medicine.company}
-                    </Typography>
-                  </>
-                )}
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 1,
+                    minWidth: 0,
+                  }}
+                >
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: "text.secondary",
+                    }}
+                  >
+                    {medicine.type}
+                  </Typography>
+
+                  {medicine.company && (
+                    <>
+                      <Box
+                        sx={{
+                          width: 4,
+                          height: 4,
+                          borderRadius: "50%",
+                          bgcolor: "text.secondary",
+                          opacity: 0.4,
+                        }}
+                      />
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          color: "text.secondary",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {medicine.company}
+                      </Typography>
+                    </>
+                  )}
+                </Box>
+
+                <Box
+                  sx={{
+                    px: 1.2,
+                    py: 0.35,
+                    borderRadius: "999px",
+                    bgcolor: locationCfg.bg,
+                    border: `1px solid ${locationCfg.border}`,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 0.7,
+                    flexShrink: 0,
+                  }}
+                >
+                  <Box
+                    sx={{
+                      width: 7,
+                      height: 7,
+                      borderRadius: "50%",
+                      bgcolor: locationCfg.color,
+                      boxShadow: `0 0 10px ${locationCfg.color}`,
+                    }}
+                  />
+
+                  <Typography
+                    sx={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      color: locationCfg.color,
+                      letterSpacing: 0.3,
+                    }}
+                  >
+                    {locationCfg.label}
+                  </Typography>
+                </Box>
               </Box>
+
               <Box
                 sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.75 }}
               >
@@ -696,18 +893,25 @@ function MedicineCard({ medicine, onClick }) {
 export default function App() {
   const [medicines, setMedicines] = useState([]);
   const [search, setSearch] = useState("");
+  const [locationFilter, setLocationFilter] = useState("All");
   const [filterType, setFilterType] = useState("All");
   const [addOpen, setAddOpen] = useState(false);
   const [detailMed, setDetailMed] = useState(null);
   const [editMed, setEditMed] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastUpload, setLastUpload] = useState(
+    localStorage.getItem("lastUpload") || "Never",
+  );
+  const [lastDownload, setLastDownload] = useState(
+    localStorage.getItem("lastDownload") || "Never",
+  );
   const handleManualRefresh = async () => {
     setIsRefreshing(true);
     try {
       if (navigator.onLine) {
-        await syncMedicines();
+        await syncMedicines(setIsSyncing, setLastUpload, setLastDownload);
       }
 
       const freshData = await getAllMedicines();
@@ -720,6 +924,8 @@ export default function App() {
       setIsRefreshing(false);
     }
   };
+  const [sortDirection, setSortDirection] = useState("desc");
+  const LOCATION_FILTERS = ["All", "Stored", "Displayed"];
 
   useEffect(() => {
     const handleOnlineStatus = () => setIsOnline(true);
@@ -751,10 +957,9 @@ export default function App() {
   useEffect(() => {
     const startSync = async () => {
       if (navigator.onLine) {
-        await syncMedicines();
+        await syncMedicines(setIsSyncing, setLastUpload, setLastDownload);
 
         const freshData = await getAllMedicines();
-
         setMedicines(freshData.filter((m) => !m.deleted));
       }
     };
@@ -764,8 +969,7 @@ export default function App() {
 
   useEffect(() => {
     const handleOnline = async () => {
-      await syncMedicines();
-
+      await syncMedicines(setIsSyncing, setLastUpload, setLastDownload);
       const freshData = await getAllMedicines();
 
       setMedicines(freshData.filter((m) => !m.deleted));
@@ -779,16 +983,48 @@ export default function App() {
   }, []);
 
   const filtered = useMemo(() => {
-    return medicines.filter((m) => {
+    const result = medicines.filter((m) => {
       if (m.deleted) return false;
 
       const matchSearch = m.name.toLowerCase().includes(search.toLowerCase());
 
       const matchType = filterType === "All" || m.type === filterType;
 
-      return matchSearch && matchType;
+      const matchLocation =
+        locationFilter === "All" ||
+        (locationFilter === "Stored" && m.location === "مخزون") ||
+        (locationFilter === "Displayed" && m.location === "معروض");
+
+      return matchSearch && matchType && matchLocation;
     });
-  }, [medicines, search, filterType]);
+
+    return result.sort((a, b) => {
+      if (sortDirection === "desc") {
+        return b.costPrice - a.costPrice;
+      } else {
+        return a.costPrice - b.costPrice;
+      }
+    });
+  }, [medicines, search, filterType, locationFilter, sortDirection]);
+
+  const totals = useMemo(() => {
+    let totalCost = 0;
+    let totalSell = 0;
+
+    filtered.forEach((m) => {
+      totalCost += (m.costPrice || 0) * (m.qty || 0);
+      totalSell += (m.sellPrice || 0) * (m.qty || 0);
+    });
+
+    const expectedProfit = totalSell - totalCost;
+
+    return {
+      totalCost: totalCost.toFixed(2),
+      totalSell: totalSell.toFixed(2),
+      expectedProfit: expectedProfit.toFixed(2),
+    };
+  }, [filtered]);
+
   const handleAdd = async (form) => {
     const newMedicine = {
       ...form,
@@ -868,6 +1104,32 @@ export default function App() {
       sellPrice: String(med.sellPrice),
     });
   };
+  const handleDecreaseQty = async (medicine) => {
+    if (medicine.qty <= 0) return;
+
+    const updatedMedicine = {
+      ...medicine,
+      qty: medicine.qty - 1,
+      updatedAt: new Date().toISOString(),
+      synced: false,
+    };
+
+    await saveMedicineDB(updatedMedicine);
+
+    setMedicines((prev) =>
+      prev.map((m) => (m.id === medicine.id ? updatedMedicine : m)),
+    );
+
+    setDetailMed(updatedMedicine);
+
+    if (navigator.onLine) {
+      await syncMedicines();
+
+      const freshData = await getAllMedicines();
+
+      setMedicines(freshData.filter((m) => !m.deleted));
+    }
+  };
 
   return (
     <ThemeProvider theme={theme}>
@@ -902,13 +1164,7 @@ export default function App() {
                 variant="h6"
                 sx={{ fontSize: { xs: 16, sm: 18 }, lineHeight: 1.2 }}
               >
-                Yahya Pharmacy
-              </Typography>
-              <Typography
-                variant="caption"
-                sx={{ color: "text.secondary", fontSize: 11 }}
-              >
-                Inventory Management
+                أبو يحيى فارم
               </Typography>
             </Box>
 
@@ -924,7 +1180,9 @@ export default function App() {
                 px: 1.2,
                 py: 0.5,
                 borderRadius: "20px",
-                border: `1px solid ${isOnline ? "rgba(34,197,94,0.2)" : "rgba(239,68,68,0.2)"}`,
+                border: `1px solid ${
+                  isOnline ? "rgba(34,197,94,0.2)" : "rgba(239,68,68,0.2)"
+                }`,
                 fontSize: { xs: 11, sm: 12 },
                 fontWeight: 500,
               }}
@@ -972,6 +1230,31 @@ export default function App() {
               <RefreshIcon sx={{ fontSize: 20 }} />
             </IconButton>
 
+            <Box
+              sx={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "flex-end",
+                ml: "auto",
+              }}
+            >
+              {isSyncing ? (
+                <CircularProgress size={16} sx={{ color: "primary.light" }} />
+              ) : (
+                <>
+                  <Typography
+                    sx={{ fontSize: 10, color: "primary.light", opacity: 0.7 }}
+                  >
+                    Sent : {lastUpload}
+                  </Typography>
+                  <Typography
+                    sx={{ fontSize: 10, color: "primary.light", opacity: 0.7 }}
+                  >
+                    Received : {lastDownload}
+                  </Typography>
+                </>
+              )}
+            </Box>
             <Chip
               label={`${medicines.length} items`}
               size="small"
@@ -988,13 +1271,26 @@ export default function App() {
         {/* Main Content */}
         <Box sx={{ px: { xs: 2, sm: 3 }, pb: 12, maxWidth: 600, mx: "auto" }}>
           {/* Search */}
-          <Box sx={{ pt: 2.5, pb: 1.5 }}>
+          <Box
+            sx={{
+              position: "sticky",
+              top: 50,
+              zIndex: 10,
+              bgcolor: "rgba(15, 23, 42, 0.75)", // نفس خلفية التطبيق الداكنة مع شفافية
+              backdropFilter: "blur(8px)", // تأثير الغباش الفخم عشان الأدوية تمر من تحته بنعومة
+              pt: 2, // مسافة من الأعلى
+              pb: 1.5, // مسافة من الأسفل لمنع الالتصاق بالفلاتر
+              mx: -2, // ليمتد البوكس الشفاف على كامل عرض الشاشة (لو كان عندك Padding في الحاوية الأبوية)
+              px: 2,
+              mb: 1,
+            }}
+          >
             <TextField
               fullWidth
-              placeholder="Search medicines…"
+              size="small"
+              placeholder="Search by medicine name..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              size="small"
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
@@ -1004,11 +1300,42 @@ export default function App() {
                   </InputAdornment>
                 ),
               }}
+              sx={{
+                "& .MuiOutlinedInput-root": {
+                  borderRadius: "14px",
+                  bgcolor: "rgba(30, 41, 59, 0.5)",
+                  "& fieldset": { borderColor: "rgba(255,255,255,0.05)" },
+                  "&:hover fieldset": {
+                    borderColor: "rgba(242, 210, 55, 0.2)",
+                  },
+                  "&.Mui-focused fieldset": { borderColor: "#f2d237" },
+                },
+              }}
             />
           </Box>
 
           {/* Filter */}
-          <Box sx={{ pb: 2 }}>
+          <Box sx={{ pb: 2, display: "flex", gap: 1, alignItems: "center" }}>
+            <FormControl fullWidth size="small">
+              <InputLabel>Location</InputLabel>
+
+              <Select
+                value={locationFilter}
+                label="Location"
+                onChange={(e) => setLocationFilter(e.target.value)}
+                sx={{
+                  borderRadius: "14px !important",
+                  bgcolor: "rgba(15,23,42,0.6)",
+                }}
+              >
+                {LOCATION_FILTERS.map((loc) => (
+                  <MenuItem key={loc} value={loc}>
+                    {loc}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            
             <FormControl fullWidth size="small">
               <InputLabel>Filter by Type</InputLabel>
               <Select
@@ -1040,8 +1367,130 @@ export default function App() {
                 ))}
               </Select>
             </FormControl>
+
+            <Button
+              variant="outlined"
+              onClick={() =>
+                setSortDirection((prev) => (prev === "desc" ? "asc" : "desc"))
+              }
+              startIcon={<Sort sx={{ fontSize: 18 }} />}
+              endIcon={
+                sortDirection === "desc" ? (
+                  <ArrowDownward sx={{ fontSize: 14, color: "#ef4444" }} />
+                ) : (
+                  <ArrowUpward sx={{ fontSize: 14, color: "#4ade80" }} />
+                )
+              }
+              sx={{
+                whiteSpace: "nowrap",
+                borderRadius: "14px",
+                height: "40px",
+                px: 2,
+                borderColor: "rgba(148,163,184,0.2)",
+                bgcolor: "rgba(15,23,42,0.4)",
+                color: "text.primary",
+                fontSize: 12,
+                textTransform: "none",
+                "&:hover": {
+                  borderColor: "#f2d237",
+                  bgcolor: "rgba(245, 210, 55, 0.04)",
+                },
+              }}
+            ></Button>
           </Box>
 
+          <Box
+            sx={{
+              mb: 2.5,
+              p: 2,
+              borderRadius: "16px",
+              bgcolor: "rgba(30, 41, 59, 0.5)", // لون داكن مريح ومتناسق مع الساس
+              backdropFilter: "blur(10px)",
+              border: "1px solid rgba(255, 255, 255, 0.05)",
+              display: "grid",
+              gridTemplateColumns: "repeat(3, 1fr)", // تقسيم المساحة لـ 3 أعمدة متساوية
+              gap: 1.5,
+              textAlign: "center",
+            }}
+          >
+            <Box
+              sx={{ borderRight: "1px solid rgba(255,255,255,0.06)", pr: 0.5 }}
+            >
+              <Typography
+                variant="caption"
+                sx={{
+                  color: "text.secondary",
+                  fontSize: 11,
+                  display: "block",
+                  mb: 0.5,
+                }}
+              >
+                Total Cost
+              </Typography>
+              <Typography
+                variant="h6"
+                sx={{
+                  color: "#94a3b8",
+                  fontWeight: "bold",
+                  fontSize: { xs: 14, sm: 16 },
+                }}
+              >
+                ILS {totals.totalCost}
+              </Typography>
+            </Box>
+
+            <Box>
+              <Typography
+                variant="caption"
+                sx={{
+                  color: "#f2d237",
+                  fontSize: 11,
+                  display: "block",
+                  mb: 0.5,
+                  fontWeight: 500,
+                }}
+              >
+                Est. Profit
+              </Typography>
+              <Typography
+                variant="h6"
+                sx={{
+                  color: "#4ade80",
+                  fontWeight: "bold",
+                  fontSize: { xs: 14, sm: 16 },
+                }}
+              >
+                ILS {totals.expectedProfit}
+              </Typography>
+            </Box>
+
+            {/* Total Sales*/}
+            <Box
+              sx={{ borderRight: "1px solid rgba(255,255,255,0.06)", pr: 0.5 }}
+            >
+              <Typography
+                variant="caption"
+                sx={{
+                  color: "text.secondary",
+                  fontSize: 11,
+                  display: "block",
+                  mb: 0.5,
+                }}
+              >
+                Total Value
+              </Typography>
+              <Typography
+                variant="h6"
+                sx={{
+                  color: "#60a5fa",
+                  fontWeight: "bold",
+                  fontSize: { xs: 14, sm: 16 },
+                }}
+              >
+                ILS {totals.totalSell}
+              </Typography>
+            </Box>
+          </Box>
           {/* Count label */}
           <Box
             sx={{
@@ -1143,7 +1592,39 @@ export default function App() {
             openEdit(med);
           }}
           onDelete={handleDelete}
+          onDecreaseQty={handleDecreaseQty}
         />
+        <Backdrop
+          sx={{
+            color: "#f2d237",
+            zIndex: (theme) => theme.zIndex.drawer + 1,
+            flexDirection: "column",
+            gap: 2,
+            backdropFilter: "blur(4px)",
+            bgcolor: "rgba(15, 23, 42, 0.7)",
+          }}
+          open={isSyncing}
+        >
+          <CircularProgress color="inherit" size={50} thickness={4} />
+          <Typography
+            variant="h6"
+            sx={{
+              color: "#fff",
+              fontWeight: 500,
+              fontSize: 16,
+              letterSpacing: 0.5,
+            }}
+          >
+            باشا ثواني بجيبلك اخر بيانات قاعد
+          </Typography>
+          <Typography
+            variant="caption"
+            sx={{
+              color: "rgba(255,255,255,0.5)",
+              fontSize: 12,
+            }}
+          ></Typography>
+        </Backdrop>
       </Box>
     </ThemeProvider>
   );

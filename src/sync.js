@@ -52,7 +52,6 @@ export const downloadMedicines = async () => {
     }
 
     const serverDate = med.updatedAt ? new Date(med.updatedAt).getTime() : 0;
-
     const localDate = localMed.updatedAt
       ? new Date(localMed.updatedAt).getTime()
       : 0;
@@ -67,14 +66,36 @@ export const downloadMedicines = async () => {
   }
 };
 
-export const syncMedicines = async () => {
+export const syncMedicines = async (
+  setIsSyncing,
+  setLastUpload,
+  setLastDownload,
+) => {
+  if (setIsSyncing) setIsSyncing(true);
+
   try {
     await uploadUnsyncedMedicines();
 
+    const uploadTime = new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    localStorage.setItem("lastUpload", uploadTime);
+    if (setLastUpload) setLastUpload(uploadTime);
+
     await downloadMedicines();
+
+    const downloadTime = new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    localStorage.setItem("lastDownload", downloadTime);
+    if (setLastDownload) setLastDownload(downloadTime);
 
     console.log("Sync completed");
   } catch (err) {
     console.error("Sync failed", err);
+  } finally {
+    if (setIsSyncing) setIsSyncing(false);
   }
 };
