@@ -30,6 +30,8 @@ import {
   Avatar,
   CircularProgress,
   Backdrop,
+  LinearProgress,
+  Paper,
 } from "@mui/material";
 import {
   Search as SearchIcon,
@@ -61,6 +63,9 @@ import {
   Edit,
   Remove,
   Delete,
+  Layers,
+  FormatListNumbered,
+  LocalPharmacyOutlined,
 } from "@mui/icons-material";
 import { useEffect } from "react";
 import { getAllMedicines, saveMedicineDB } from "./db";
@@ -162,6 +167,7 @@ const MEDICINE_TYPES = [
   "Syrup",
   "Drops",
   "Ampoule",
+  "Suppository",
   "Cream",
   "Oint",
   "Emulgel",
@@ -189,7 +195,11 @@ const TYPE_CONFIG = {
     color: "#8B5CF6",
     bg: "rgba(139, 92, 246, 0.1)",
   },
-
+  Suppository: {
+    icon: <MedicalServices fontSize="small" />,
+    color: "#F97316",
+    bg: "rgba(249,115,22,0.1)",
+  },
   Cream: {
     icon: <Healing fontSize="small" />,
     color: "#EC4899",
@@ -226,11 +236,15 @@ const getLowStockStatus = (qty) => {
 };
 
 // ─── Add/Edit Dialog ──────────────────────────────────────────────────────────
-
 const EMPTY_FORM = {
   name: "",
   type: "",
   qty: "",
+
+  stripsPerBox: "",
+  pillsPerStrip: "",
+  currentPillsQty: "",
+
   costPrice: "",
   sellPrice: "",
   company: "",
@@ -244,7 +258,11 @@ function MedicineFormDialog({ open, onClose, onSave, initial }) {
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const valid =
-    form.name && form.type && form.qty && form.costPrice && form.sellPrice;
+    form.name.trim() &&
+    form.type &&
+    form.qty !== "" &&
+    form.costPrice !== "" &&
+    form.sellPrice !== "";
 
   const handleSave = () => {
     if (valid) {
@@ -328,6 +346,42 @@ function MedicineFormDialog({ open, onClose, onSave, initial }) {
           size="small"
           type="number"
         />
+        {["Tablets", "Ampoule", "Suppository"].includes(form.type) && (
+          <>
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: 2,
+              }}
+            >
+              <TextField
+                label="Strips Per Box"
+                value={form.stripsPerBox}
+                onChange={set("stripsPerBox")}
+                size="small"
+                type="number"
+              />
+
+              <TextField
+                label="Pills Per Strip"
+                value={form.pillsPerStrip}
+                onChange={set("pillsPerStrip")}
+                size="small"
+                type="number"
+              />
+            </Box>
+
+            <TextField
+              label="Current Pills Quantity"
+              value={form.currentPillsQty}
+              onChange={set("currentPillsQty")}
+              fullWidth
+              size="small"
+              type="number"
+            />
+          </>
+        )}
         <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
           <TextField
             label="Cost Price"
@@ -421,10 +475,17 @@ function MedicineDetailsDialog({
   if (!medicine) return null;
   const cfg = getTypeConfig(medicine.type);
   const stock = getLowStockStatus(medicine.qty);
-  const margin = (
-    ((medicine.sellPrice - medicine.costPrice) / medicine.costPrice) *
-    100
-  ).toFixed(0);
+
+  const margin =
+    medicine.costPrice && medicine.costPrice !== 0
+      ? (
+          ((medicine.sellPrice - medicine.costPrice) / medicine.costPrice) *
+          100
+        ).toFixed(0)
+      : "0";
+
+  const displayValue = (val) =>
+    val !== undefined && val !== null && val !== "" ? val : "Unknown";
 
   return (
     <Dialog
@@ -491,12 +552,16 @@ function MedicineDetailsDialog({
             },
             {
               label: "Cost",
-              value: `ILS ${medicine.costPrice.toFixed(2)}`,
+              value: `ILS ${
+                medicine.costPrice ? medicine.costPrice.toFixed(2) : "0.00"
+              }`,
               icon: <MoneyIcon sx={{ fontSize: 16 }} />,
             },
             {
               label: "Sell",
-              value: `ILS ${medicine.sellPrice.toFixed(2)}`,
+              value: `ILS ${
+                medicine.sellPrice ? medicine.sellPrice.toFixed(2) : "0.00"
+              }`,
               icon: <MoneyIcon sx={{ fontSize: 16 }} />,
             },
           ].map((item) => (
@@ -561,6 +626,63 @@ function MedicineDetailsDialog({
               </Box>
             </Box>
           )}
+
+          {/* تظهر هذه الحقول فقط للأشكال الدوائية التي تحتوي على حبوب/شريط */}
+          {(medicine.type === "Tablets" ||
+            medicine.type === "Ampoule" ||
+            medicine.type === "Suppository") && (
+            <>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+                <Layers sx={{ color: "text.secondary", fontSize: 18 }} />
+                <Box>
+                  <Typography
+                    variant="caption"
+                    sx={{ color: "text.secondary", display: "block" }}
+                  >
+                    Strips Per Box
+                  </Typography>
+                  <Typography sx={{ fontSize: 14, fontWeight: 500 }}>
+                    {displayValue(medicine.stripsPerBox)}
+                  </Typography>
+                </Box>
+              </Box>
+
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+                <FormatListNumbered
+                  sx={{ color: "text.secondary", fontSize: 18 }}
+                />
+                <Box>
+                  <Typography
+                    variant="caption"
+                    sx={{ color: "text.secondary", display: "block" }}
+                  >
+                    Pills Per Strip
+                  </Typography>
+                  <Typography sx={{ fontSize: 14, fontWeight: 500 }}>
+                    {displayValue(medicine.pillsPerStrip)}
+                  </Typography>
+                </Box>
+              </Box>
+
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+                <LocalPharmacy sx={{ color: "text.secondary", fontSize: 18 }} />
+                <Box>
+                  <Typography
+                    variant="caption"
+                    sx={{ color: "text.secondary", display: "block" }}
+                  >
+                    Current Loose Pills Qty (الحبوب الفرط الحالية)
+                  </Typography>
+                  <Typography
+                    sx={{ fontSize: 14, fontWeight: 600, color: "info.main" }}
+                  >
+                    {displayValue(medicine.currentPillsQty)}
+                  </Typography>
+                </Box>
+              </Box>
+            </>
+          )}
+
           <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
             <ScienceIcon sx={{ color: "text.secondary", fontSize: 18 }} />
             <Box>
@@ -649,11 +771,6 @@ function MedicineDetailsDialog({
 // ─── Medicine Card ────────────────────────────────────────────────────────────
 
 function MedicineCard({ medicine, onClick }) {
-  console.table({
-    name: medicine.name,
-    company: medicine.company,
-    location: medicine.location,
-  });
   const locationCfg =
     medicine.location === "مخزون"
       ? {
@@ -668,8 +785,12 @@ function MedicineCard({ medicine, onClick }) {
           bg: "rgba(16,185,129,0.12)",
           border: "rgba(16,185,129,0.25)",
         };
+
   const cfg = getTypeConfig(medicine.type);
   const stock = getLowStockStatus(medicine.qty);
+
+  const displayValue = (val) =>
+    val !== undefined && val !== null && val !== "" ? val : "Unknown";
 
   return (
     <Fade in timeout={300}>
@@ -678,17 +799,14 @@ function MedicineCard({ medicine, onClick }) {
         sx={{
           position: "relative",
           overflow: "hidden",
-
           bgcolor:
             medicine.location === "مخزون"
               ? "rgba(245,158,11,0.03)"
               : "rgba(16,185,129,0.03)",
-
           border:
             medicine.location === "مخزون"
               ? "1px solid rgba(245,158,11,0.12)"
               : "1px solid rgba(16,185,129,0.12)",
-
           "&:hover": {
             transform: "translateY(-2px)",
             boxShadow:
@@ -696,7 +814,6 @@ function MedicineCard({ medicine, onClick }) {
                 ? "0 8px 25px rgba(245,158,11,0.12)"
                 : "0 8px 25px rgba(16,185,129,0.12)",
           },
-
           "&::before": {
             content: '""',
             position: "absolute",
@@ -708,7 +825,6 @@ function MedicineCard({ medicine, onClick }) {
           },
         }}
       >
-        {" "}
         <CardActionArea onClick={() => onClick(medicine)} sx={{ p: 0 }}>
           <CardContent
             sx={{
@@ -761,7 +877,8 @@ function MedicineCard({ medicine, onClick }) {
                     flexShrink: 0,
                   }}
                 >
-                  ILS {medicine.sellPrice.toFixed(2)}
+                  ILS{" "}
+                  {medicine.sellPrice ? medicine.sellPrice.toFixed(2) : "0.00"}
                 </Typography>
               </Box>
 
@@ -783,9 +900,7 @@ function MedicineCard({ medicine, onClick }) {
                 >
                   <Typography
                     variant="caption"
-                    sx={{
-                      color: "text.secondary",
-                    }}
+                    sx={{ color: "text.secondary" }}
                   >
                     {medicine.type}
                   </Typography>
@@ -838,7 +953,6 @@ function MedicineCard({ medicine, onClick }) {
                       boxShadow: `0 0 10px ${locationCfg.color}`,
                     }}
                   />
-
                   <Typography
                     sx={{
                       fontSize: 10,
@@ -856,7 +970,7 @@ function MedicineCard({ medicine, onClick }) {
                 sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.75 }}
               >
                 <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                  Qty:{" "}
+                  الكمية (علبة):{" "}
                   <Box
                     component="span"
                     sx={{
@@ -880,6 +994,80 @@ function MedicineCard({ medicine, onClick }) {
                   />
                 )}
               </Box>
+
+              {(medicine.type === "Tablets" ||
+                medicine.type === "Ampoule" ||
+                medicine.type === "Suppository") && (
+                <Box
+                  sx={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                    gap: "8px",
+                    mt: 0.5,
+                    pt: 0.5,
+                    borderTop: "1px dashed rgba(0, 0, 0, 0.05)",
+                  }}
+                >
+                  <Typography
+                    variant="caption"
+                    sx={{ color: "text.secondary", fontSize: 11 }}
+                  >
+                    شرائط/علبة:{" "}
+                    <Box
+                      component="span"
+                      sx={{ color: "text.primary", fontWeight: 600 }}
+                    >
+                      {displayValue(medicine.stripsPerBox)}
+                    </Box>
+                  </Typography>
+
+                  <Box
+                    sx={{
+                      width: 3,
+                      height: 3,
+                      borderRadius: "50%",
+                      bgcolor: "text.disabled",
+                    }}
+                  />
+
+                  <Typography
+                    variant="caption"
+                    sx={{ color: "text.secondary", fontSize: 11 }}
+                  >
+                    حبوب/شريط:{" "}
+                    <Box
+                      component="span"
+                      sx={{ color: "text.primary", fontWeight: 600 }}
+                    >
+                      {displayValue(medicine.pillsPerStrip)}
+                    </Box>
+                  </Typography>
+
+                  <Box
+                    sx={{
+                      width: 3,
+                      height: 3,
+                      borderRadius: "50%",
+                      bgcolor: "text.disabled",
+                    }}
+                  />
+
+                  <Typography
+                    variant="caption"
+                    sx={{ color: "text.secondary", fontSize: 11 }}
+                  >
+                    الحبوب الحالية:{" "}
+                    <Box
+                      component="span"
+                      sx={{ color: "info.main", fontWeight: 600 }}
+                    >
+                      {displayValue(medicine.currentPillsQty)}
+                    </Box>
+                  </Typography>
+                </Box>
+              )}
+              {/* ------------------------------------------------------------- */}
             </Box>
           </CardContent>
         </CardActionArea>
@@ -916,8 +1104,6 @@ export default function App() {
 
       const freshData = await getAllMedicines();
       setMedicines(freshData.filter((m) => !m.deleted));
-
-      console.log("تم تحديث البيانات بنجاح يدوياً!");
     } catch (error) {
       console.error("فشل التحديث اليدوي للبيانات", error);
     } finally {
@@ -1029,9 +1215,16 @@ export default function App() {
     const newMedicine = {
       ...form,
       id: uuidv4(),
+
       qty: Number(form.qty),
+
+      stripsPerBox: Number(form.stripsPerBox) || 0,
+      pillsPerStrip: Number(form.pillsPerStrip) || 0,
+      currentPillsQty: Number(form.currentPillsQty) || 0,
+
       costPrice: Number(form.costPrice),
       sellPrice: Number(form.sellPrice),
+
       updatedAt: new Date().toISOString(),
       deleted: false,
       synced: false,
@@ -1043,7 +1236,6 @@ export default function App() {
 
     if (navigator.onLine) {
       await syncMedicines();
-      // تأكيد مزامنة البيانات النهائية في الـ State
       const freshData = await getAllMedicines();
       setMedicines(freshData.filter((m) => !m.deleted));
     }
@@ -1053,7 +1245,13 @@ export default function App() {
     const updatedMedicine = {
       ...editMed,
       ...form,
+
       qty: Number(form.qty),
+
+      stripsPerBox: Number(form.stripsPerBox) || 0,
+      pillsPerStrip: Number(form.pillsPerStrip) || 0,
+      currentPillsQty: Number(form.currentPillsQty) || 0,
+
       costPrice: Number(form.costPrice),
       sellPrice: Number(form.sellPrice),
       updatedAt: new Date().toISOString(),
@@ -1099,9 +1297,15 @@ export default function App() {
   const openEdit = (med) => {
     setEditMed({
       ...med,
-      qty: String(med.qty),
-      costPrice: String(med.costPrice),
-      sellPrice: String(med.sellPrice),
+
+      qty: String(med.qty ?? ""),
+
+      stripsPerBox: String(med.stripsPerBox ?? ""),
+      pillsPerStrip: String(med.pillsPerStrip ?? ""),
+      currentPillsQty: String(med.currentPillsQty ?? ""),
+
+      costPrice: String(med.costPrice ?? ""),
+      sellPrice: String(med.sellPrice ?? ""),
     });
   };
   const handleDecreaseQty = async (medicine) => {
@@ -1335,7 +1539,7 @@ export default function App() {
                 ))}
               </Select>
             </FormControl>
-            
+
             <FormControl fullWidth size="small">
               <InputLabel>Filter by Type</InputLabel>
               <Select
@@ -1595,35 +1799,122 @@ export default function App() {
           onDecreaseQty={handleDecreaseQty}
         />
         <Backdrop
-          sx={{
-            color: "#f2d237",
-            zIndex: (theme) => theme.zIndex.drawer + 1,
-            flexDirection: "column",
-            gap: 2,
-            backdropFilter: "blur(4px)",
-            bgcolor: "rgba(15, 23, 42, 0.7)",
-          }}
           open={isSyncing}
+          sx={{
+            zIndex: 9999,
+            bgcolor: "rgba(2,6,23,0.75)",
+            backdropFilter: "blur(12px)",
+          }}
         >
-          <CircularProgress color="inherit" size={50} thickness={4} />
-          <Typography
-            variant="h6"
+          <Box
             sx={{
-              color: "#fff",
-              fontWeight: 500,
-              fontSize: 16,
-              letterSpacing: 0.5,
+              width: 340,
+              p: 4,
+              borderRadius: 6,
+              textAlign: "center",
+
+              background: "rgba(255,255,255,0.05)",
+
+              border: "1px solid rgba(255,255,255,0.08)",
+
+              boxShadow: `
+        0 0 30px rgba(242,210,55,0.08),
+        inset 0 1px 0 rgba(255,255,255,0.05)
+      `,
             }}
           >
-            باشا ثواني بجيبلك اخر بيانات قاعد
-          </Typography>
-          <Typography
-            variant="caption"
-            sx={{
-              color: "rgba(255,255,255,0.5)",
-              fontSize: 12,
-            }}
-          ></Typography>
+            {/* Logo Circle */}
+
+            <Box
+              sx={{
+                width: 90,
+                height: 90,
+                mx: "auto",
+                mb: 3,
+                borderRadius: "50%",
+
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+
+                background: "linear-gradient(135deg,#f2d23722,#f2d23708)",
+
+                border: "1px solid rgba(242,210,55,0.15)",
+
+                animation: "float 2s ease-in-out infinite",
+
+                "@keyframes float": {
+                  "0%,100%": {
+                    transform: "translateY(0px)",
+                  },
+                  "50%": {
+                    transform: "translateY(-6px)",
+                  },
+                },
+              }}
+            >
+              <LocalPharmacy
+                sx={{
+                  color: "#f2d237",
+                  fontSize: 42,
+                }}
+              />
+            </Box>
+
+            <Typography
+              sx={{
+                color: "#fff",
+                fontWeight: 700,
+                fontSize: 20,
+                mb: 1,
+              }}
+            >
+              Syncing Inventory
+            </Typography>
+
+            <Typography
+              sx={{
+                color: "rgba(255,255,255,0.6)",
+                fontSize: 14,
+                mb: 3,
+              }}
+            >
+              Fetching latest medicines and stock updates
+            </Typography>
+
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "center",
+                gap: 1,
+                mt: 2,
+              }}
+            >
+              {[0, 1, 2].map((i) => (
+                <Box
+                  key={i}
+                  sx={{
+                    width: 10,
+                    height: 10,
+                    borderRadius: "50%",
+                    bgcolor: "#f2d237",
+                    animation: "bounce 1.2s infinite",
+                    animationDelay: `${i * 0.2}s`,
+                    "@keyframes bounce": {
+                      "0%,80%,100%": {
+                        transform: "scale(0.6)",
+                        opacity: 0.4,
+                      },
+                      "40%": {
+                        transform: "scale(1.2)",
+                        opacity: 1,
+                      },
+                    },
+                  }}
+                />
+              ))}
+            </Box>
+          </Box>
         </Backdrop>
       </Box>
     </ThemeProvider>
