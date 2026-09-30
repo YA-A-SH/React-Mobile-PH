@@ -1092,19 +1092,20 @@ export default function InventoryPage({ selectedPharmacy = "old" }) {
   const ADMIN_PASSWORD = "05975520140598765139";
 
   const [isAdmin, setIsAdmin] = useState(
-    localStorage.getItem("app_role") === "admin",
+    localStorage.getItem("app_role") === "admin" ||
+      localStorage.getItem("isAdmin") === "true",
   );
 
   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
 
   const [inputPassword, setInputPassword] = useState("");
-
   const handleAdminAccess = () => {
     if (isAdmin) {
       const confirmLogout = window.confirm("لا إله إلا الله ليش بدك تطلع ؟");
 
       if (confirmLogout) {
         localStorage.setItem("app_role", "viewer");
+        localStorage.setItem("isAdmin", "false"); // <-- أضف هذا السطر
         setIsAdmin(false);
       }
 
@@ -1113,10 +1114,10 @@ export default function InventoryPage({ selectedPharmacy = "old" }) {
 
     setShowPasswordDialog(true);
   };
-
   const handlePasswordSubmit = () => {
     if (inputPassword === ADMIN_PASSWORD) {
       localStorage.setItem("app_role", "admin");
+      localStorage.setItem("isAdmin", "true"); // <-- أضف هذا السطر
       setIsAdmin(true);
       setShowPasswordDialog(false);
       setInputPassword("");

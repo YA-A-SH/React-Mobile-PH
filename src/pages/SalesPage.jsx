@@ -1928,8 +1928,19 @@ export default function SalesPage({ selectedPharmacy = "old" }) {
   const isMobile = useMediaQuery("(max-width:767px)");
 
   // Admin flag: same localStorage mechanism as Inventory (read-only here).
-  const [isAdmin] = useState(readIsAdmin);
+  const [isAdmin, setIsAdmin] = useState(readIsAdmin);
 
+  useEffect(() => {
+    const checkAdmin = () => setIsAdmin(readIsAdmin());
+
+    window.addEventListener("focus", checkAdmin);
+    window.addEventListener("storage", checkAdmin);
+
+    return () => {
+      window.removeEventListener("focus", checkAdmin);
+      window.removeEventListener("storage", checkAdmin);
+    };
+  }, []);
   // Date ALWAYS starts as the current local date and is never persisted.
   const [selectedDate, setSelectedDate] = useState(() => toDateKey(new Date()));
 
@@ -2743,7 +2754,13 @@ export default function SalesPage({ selectedPharmacy = "old" }) {
               setEditSale(null);
             }}
             medicines={pharmacyMedicines}
-            onSubmit={editSale ? handleEditSale : handleCreateSale}
+            onSubmit={(formData) => {
+              if (editSale) {
+                return handleEditSale(formData);
+              } else {
+                return handleCreateSale(formData);
+              }
+            }}
             editSale={editSale}
             editItems={editSale ? itemsBySale[editSale.id] || [] : []}
           />
