@@ -1041,6 +1041,7 @@ export default function InventoryPage({ selectedPharmacy = "old" }) {
   const [search, setSearch] = useState("");
   const [locationFilter, setLocationFilter] = useState("All");
   const [filterType, setFilterType] = useState("All");
+  const [companyFilter, setCompanyFilter] = useState("All");
   const [addOpen, setAddOpen] = useState(false);
   const [detailMed, setDetailMed] = useState(null);
   const [editMed, setEditMed] = useState(null);
@@ -1145,6 +1146,18 @@ export default function InventoryPage({ selectedPharmacy = "old" }) {
   const [sortDirection, setSortDirection] = useState("desc");
   const LOCATION_FILTERS = ["All", "Stored", "Displayed"];
 
+  const companyFilters = useMemo(() => {
+    const companies = medicines
+      .filter(
+        (m) =>
+          !m.deleted &&
+          m.location === "مخزون" &&
+          String(m.company || "").trim(),
+      )
+      .map((m) => String(m.company).trim());
+
+    return ["All", ...Array.from(new Set(companies)).sort()];
+  }, [medicines]);
   const getCurrentPharmacyMedicines = useCallback(
     (data) =>
       data.filter(
@@ -1153,6 +1166,11 @@ export default function InventoryPage({ selectedPharmacy = "old" }) {
     [selectedPharmacy],
   );
 
+  useEffect(() => {
+    if (locationFilter !== "Stored") {
+      setCompanyFilter("All");
+    }
+  }, [locationFilter]);
   useEffect(() => {
     const handleOnlineStatus = () => setIsOnline(true);
     const handleOfflineStatus = () => setIsOnline(false);
@@ -1217,21 +1235,32 @@ export default function InventoryPage({ selectedPharmacy = "old" }) {
         (m.qrCode && m.qrCode.toLowerCase().includes(searchText));
 
       const matchType = filterType === "All" || m.type === filterType;
+
       const matchLocation =
         locationFilter === "All" ||
         (locationFilter === "Stored" && m.location === "مخزون") ||
         (locationFilter === "Displayed" && m.location === "معروض");
 
-      return matchSearch && matchType && matchLocation;
-    });
+      const matchCompany =
+        locationFilter !== "Stored" ||
+        companyFilter === "All" ||
+        String(m.company || "").trim() === companyFilter;
 
+      return matchSearch && matchType && matchLocation && matchCompany;
+    });
     return result.sort((a, b) => {
       return sortDirection === "desc"
         ? b.costPrice - a.costPrice
         : a.costPrice - b.costPrice;
     });
-  }, [medicines, search, filterType, locationFilter, sortDirection]);
-
+  }, [
+    medicines,
+    search,
+    filterType,
+    locationFilter,
+    companyFilter,
+    sortDirection,
+  ]);
   const totals = useMemo(() => {
     let totalCost = 0;
     let totalSell = 0;
@@ -1522,7 +1551,27 @@ export default function InventoryPage({ selectedPharmacy = "old" }) {
                 ))}
               </Select>
             </FormControl>
+            {locationFilter === "Stored" && (
+              <FormControl fullWidth size="small">
+                <InputLabel>Company</InputLabel>
 
+                <Select
+                  value={companyFilter}
+                  label="Company"
+                  onChange={(e) => setCompanyFilter(e.target.value)}
+                  sx={{
+                    borderRadius: "14px !important",
+                    bgcolor: "#FFFFFF",
+                  }}
+                >
+                  {companyFilters.map((company) => (
+                    <MenuItem key={company} value={company}>
+                      {company === "All" ? "All Companies" : company}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
             <Button
               variant="outlined"
               onClick={() =>
