@@ -111,7 +111,7 @@ export const pieceLabel = (type) =>
 
 export const getStock = (med) => {
   const pk = getPackaging(med);
-  const totalBase = Math.max(0, num(med?.stockUnits));
+  const totalBase = Math.max(0, num(med?.displayed_qty));
 
   if (!pk.divisible) {
     return {
@@ -239,10 +239,13 @@ export const checkStock = (med, q) => {
 
 export const applyDeduction = (med, q) => {
   const n = normalizeQuantity(med, q);
-  const currentStock = Math.max(0, num(med?.stockUnits));
+  const currentDisplayed = Math.max(0, num(med?.displayed_qty));
+  const newDisplayed = Math.max(0, currentDisplayed - n.base);
 
   return {
-    stockUnits: Math.max(0, currentStock - n.base),
+    displayed_qty: newDisplayed,
+    storage_qty: num(med?.storage_qty) || 0,
+    stockUnits: newDisplayed + (num(med?.storage_qty) || 0),
   };
 };
 

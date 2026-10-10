@@ -13,8 +13,9 @@ import {
 } from "./salesLogic";
 
 const DB_NAME = "PharmacyDB";
-// v1 → v2: adds the `sales` and `sale_items` stores. `medicines` is untouched.
-const DB_VERSION = 4;
+const DB_VERSION = 6;
+const PURCHASE_INVOICES_STORE = "purchase_invoices";
+const PURCHASE_PAYMENTS_STORE = "purchase_payments";
 const STORE_NAME = "medicines";
 const SALES_STORE = "sales";
 const SALE_ITEMS_STORE = "sale_items";
@@ -26,6 +27,8 @@ export const initDB = () => {
 
     request.onupgradeneeded = (event) => {
       const db = event.target.result;
+      const oldVersion = event.oldVersion;
+
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME, { keyPath: "id" });
       }
@@ -38,12 +41,48 @@ export const initDB = () => {
         const items = db.createObjectStore(SALE_ITEMS_STORE, { keyPath: "id" });
         items.createIndex("sale_id", "sale_id", { unique: false });
       }
-      if (db.objectStoreNames.contains("DELETED_SALES_STORE")) {
-        db.deleteObjectStore("DELETED_SALES_STORE");
-      }
-
       if (!db.objectStoreNames.contains(DELETED_SALES_STORE)) {
         db.createObjectStore(DELETED_SALES_STORE, { keyPath: "id" });
+      }
+      if (!db.objectStoreNames.contains(PURCHASE_INVOICES_STORE)) {
+        const invStore = db.createObjectStore(PURCHASE_INVOICES_STORE, {
+          keyPath: "id",
+        });
+        invStore.createIndex("date", "date", { unique: false });
+      }
+      if (!db.objectStoreNames.contains(PURCHASE_PAYMENTS_STORE)) {
+        const payStore = db.createObjectStore(PURCHASE_PAYMENTS_STORE, {
+          keyPath: "id",
+        });
+        payStore.createIndex("invoice_id", "invoice_id", { unique: false });
+      }
+      // ===== الترقية من الإصدار 4 إلى 5 =====
+      // إضافة الحقول الجديدة displayed_qty و storage_qty و is_merged
+      if (oldVersion < 5) {
+        const tx = event.target.transaction;
+        const medStore = tx.objectStore(STORE_NAME);
+
+        const getAllReq = medStore.getAll();
+        getAllReq.onsuccess = () => {
+          const medicines = getAllReq.result || [];
+          medicines.forEach((med) => {
+            if (
+              med.displayed_qty === undefined &&
+              med.storage_qty === undefined
+            ) {
+              const stock = Number(med.stockUnits) || 0;
+              if (med.location === "مخزون") {
+                med.displayed_qty = 0;
+                med.storage_qty = stock;
+              } else {
+                med.displayed_qty = stock;
+                med.storage_qty = 0;
+              }
+              med.is_merged = med.is_merged || false;
+              medStore.put(med);
+            }
+          });
+        };
       }
     };
 
@@ -312,10 +351,15 @@ export const deleteSaleDB = (saleId) =>
           const unitsToRestore = Number(
             item.quantity_in_base_units || item.quantity || 0,
           );
+          const currentDisplayed = Math.max(0, Number(med.displayed_qty) || 0);
+          const currentStorage = Number(med.storage_qty) || 0;
+
           await reqToPromise(
             medStore.put({
               ...med,
-              stockUnits: (Number(med.stockUnits) || 0) + unitsToRestore,
+              displayed_qty: currentDisplayed + unitsToRestore,
+              storage_qty: currentStorage,
+              stockUnits: currentDisplayed + unitsToRestore + currentStorage,
               updatedAt: now,
               synced: false,
             }),
@@ -467,9 +511,16 @@ export const updateSaleWithStockDB = (id, pharmacy, input) =>
 
         const currentStock = Math.max(0, Number(medicine.stockUnits) || 0);
 
+        const currentDisplayed = Math.max(
+          0,
+          Number(medicine.displayed_qty) || 0,
+        );
         const restored = {
           ...medicine,
-          stockUnits: currentStock + soldUnits,
+          displayed_qty: currentDisplayed + soldUnits,
+          storage_qty: Number(medicine.storage_qty) || 0,
+          stockUnits:
+            currentDisplayed + soldUnits + (Number(medicine.storage_qty) || 0),
           updatedAt: now,
           synced: false,
         };
@@ -551,6 +602,8 @@ export const updateSaleWithStockDB = (id, pharmacy, input) =>
 
         const updatedMedicine = {
           ...med,
+          displayed_qty: deducted.displayed_qty,
+          storage_qty: deducted.storage_qty,
           stockUnits: deducted.stockUnits,
           updatedAt: now,
           synced: false,
@@ -774,6 +827,8 @@ export const createSaleDB = (input) =>
 
         updatedMedicines.push({
           ...med,
+          displayed_qty: deducted.displayed_qty,
+          storage_qty: deducted.storage_qty,
           stockUnits: deducted.stockUnits,
           updatedAt: now,
           synced: false,
@@ -908,3 +963,243 @@ export const putMissingSaleItemsDB = (serverItems) =>
       if (!local) await reqToPromise(store.put({ ...item, synced: true }));
     }
   });
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Purchase Invoices & Payments DB API
+// ═════════════════════════════════════════════════════════════════════════════
+
+export const getAllPurchaseInvoicesDB = () =>
+  runTx([PURCHASE_INVOICES_STORE], "readonly", (tx) =>
+    reqToPromise(tx.objectStore(PURCHASE_INVOICES_STORE).getAll()),
+  );
+
+export const getPurchasePaymentsDB = (invoiceId) =>
+  runTx([PURCHASE_PAYMENTS_STORE], "readonly", (tx) =>
+    reqToPromise(
+      tx
+        .objectStore(PURCHASE_PAYMENTS_STORE)
+        .index("invoice_id")
+        .getAll(invoiceId),
+    ),
+  );
+
+// حفظ فاتورة شراء وتحديث الكميات والمتوسط المرجح
+export const savePurchaseInvoiceDB = (invoice) =>
+  runTx([PURCHASE_INVOICES_STORE, STORE_NAME], "readwrite", async (tx) => {
+    const invStore = tx.objectStore(PURCHASE_INVOICES_STORE);
+    const medStore = tx.objectStore(STORE_NAME);
+
+    await reqToPromise(invStore.put(invoice));
+
+    const now = new Date().toISOString();
+
+    for (const item of invoice.items) {
+      if (!item.medicineId) continue;
+      const med = await reqToPromise(medStore.get(item.medicineId));
+      if (med) {
+        const addedStorage = Number(item.storageQty) || 0;
+        const addedDisplayed = Number(item.displayedQty) || 0;
+        const totalAdded = addedStorage + addedDisplayed;
+
+        const oldStorage = Number(med.storage_qty) || 0;
+        const oldDisplayed = Number(med.displayed_qty) || 0;
+        const oldTotal = oldStorage + oldDisplayed;
+
+        const oldCost = Number(med.costPrice) || 0;
+        const newCost = Number(item.costPrice) || oldCost;
+
+        // حساب المتوسط المرجح لسعر التكلفة (Weighted Average Cost Price)
+        const combinedTotal = oldTotal + totalAdded;
+        const weightedCost =
+          combinedTotal > 0
+            ? (oldTotal * oldCost + totalAdded * newCost) / combinedTotal
+            : newCost;
+
+        await reqToPromise(
+          medStore.put({
+            ...med,
+            storage_qty: oldStorage + addedStorage,
+            displayed_qty: oldDisplayed + addedDisplayed,
+            stockUnits: combinedTotal,
+            costPrice: Math.round(weightedCost * 100) / 100,
+            sellPrice: Number(item.sellPrice) || med.sellPrice,
+            updatedAt: now,
+            synced: false,
+          }),
+        );
+      }
+    }
+    return invoice;
+  });
+
+// تعديل فاتورة شراء مع عكس كمياتها القديمة ثم تطبيق الكميات الجديدة.
+export const updatePurchaseInvoiceDB = (invoice) =>
+  runTx([PURCHASE_INVOICES_STORE, STORE_NAME], "readwrite", async (tx) => {
+    const invStore = tx.objectStore(PURCHASE_INVOICES_STORE);
+    const medStore = tx.objectStore(STORE_NAME);
+
+    const oldInvoice = await reqToPromise(invStore.get(invoice.id));
+    if (!oldInvoice) {
+      throw new Error("Invoice not found");
+    }
+
+    const now = new Date().toISOString();
+
+    // أولًا: عكس كميات الأصناف في النسخة القديمة من الفاتورة.
+    for (const item of oldInvoice.items || []) {
+      if (!item.medicineId) continue;
+
+      const med = await reqToPromise(medStore.get(item.medicineId));
+      if (!med) continue;
+
+      const storage = Math.max(
+        0,
+        (Number(med.storage_qty) || 0) - (Number(item.storageQty) || 0),
+      );
+
+      const displayed = Math.max(
+        0,
+        (Number(med.displayed_qty) || 0) - (Number(item.displayedQty) || 0),
+      );
+
+      await reqToPromise(
+        medStore.put({
+          ...med,
+          storage_qty: storage,
+          displayed_qty: displayed,
+          stockUnits: storage + displayed,
+          updatedAt: now,
+          synced: false,
+        }),
+      );
+    }
+
+    // ثانيًا: تطبيق الكميات الجديدة الموجودة في الفاتورة المعدّلة.
+    for (const item of invoice.items || []) {
+      if (!item.medicineId) continue;
+
+      const med = await reqToPromise(medStore.get(item.medicineId));
+      if (!med) continue;
+
+      const storage =
+        (Number(med.storage_qty) || 0) + (Number(item.storageQty) || 0);
+
+      const displayed =
+        (Number(med.displayed_qty) || 0) + (Number(item.displayedQty) || 0);
+
+      await reqToPromise(
+        medStore.put({
+          ...med,
+          storage_qty: storage,
+          displayed_qty: displayed,
+          stockUnits: storage + displayed,
+          costPrice: Number(item.costPrice) || med.costPrice,
+          sellPrice: Number(item.sellPrice) || med.sellPrice,
+          updatedAt: now,
+          synced: false,
+        }),
+      );
+    }
+
+    // حفظ الفاتورة بعد التعديل.
+    const updatedInvoice = {
+      ...invoice,
+      updated_at: now,
+      synced: false,
+    };
+
+    await reqToPromise(invStore.put(updatedInvoice));
+
+    return updatedInvoice;
+  });
+// إضافة دفعة جديدة وتحديث حالة الفاتورة
+export const addPurchasePaymentDB = (invoiceId, paymentRecord) =>
+  runTx(
+    [PURCHASE_INVOICES_STORE, PURCHASE_PAYMENTS_STORE],
+    "readwrite",
+    async (tx) => {
+      const invStore = tx.objectStore(PURCHASE_INVOICES_STORE);
+      const payStore = tx.objectStore(PURCHASE_PAYMENTS_STORE);
+
+      const invoice = await reqToPromise(invStore.get(invoiceId));
+      if (!invoice) throw new Error("Invoice not found");
+
+      await reqToPromise(payStore.put(paymentRecord));
+
+      const newPaidAmount =
+        (Number(invoice.paidAmount) || 0) + Number(paymentRecord.amount);
+      const newStatus =
+        newPaidAmount >= invoice.totalAmount
+          ? "fully_paid"
+          : newPaidAmount > 0
+          ? "partially_paid"
+          : "unpaid";
+
+      const updatedInvoice = {
+        ...invoice,
+        paidAmount: newPaidAmount,
+        paymentStatus: newStatus,
+        updated_at: new Date().toISOString(),
+        synced: false,
+      };
+
+      await reqToPromise(invStore.put(updatedInvoice));
+      return updatedInvoice;
+    },
+  );
+
+// حذف فاتورة وعكس تأثير الكميات على المخزون
+export const deletePurchaseInvoiceDB = (invoiceId) =>
+  runTx(
+    [PURCHASE_INVOICES_STORE, PURCHASE_PAYMENTS_STORE, STORE_NAME],
+    "readwrite",
+    async (tx) => {
+      const invStore = tx.objectStore(PURCHASE_INVOICES_STORE);
+      const payStore = tx.objectStore(PURCHASE_PAYMENTS_STORE);
+      const medStore = tx.objectStore(STORE_NAME);
+
+      const invoice = await reqToPromise(invStore.get(invoiceId));
+      if (!invoice) return;
+
+      // عكس تأثير الكميات على المخزون
+      for (const item of invoice.items) {
+        if (!item.medicineId) continue;
+        const med = await reqToPromise(medStore.get(item.medicineId));
+        if (med) {
+          const subStorage = Number(item.storageQty) || 0;
+          const subDisplayed = Number(item.displayedQty) || 0;
+
+          const currentStorage = Math.max(
+            0,
+            (Number(med.storage_qty) || 0) - subStorage,
+          );
+          const currentDisplayed = Math.max(
+            0,
+            (Number(med.displayed_qty) || 0) - subDisplayed,
+          );
+
+          await reqToPromise(
+            medStore.put({
+              ...med,
+              storage_qty: currentStorage,
+              displayed_qty: currentDisplayed,
+              stockUnits: currentStorage + currentDisplayed,
+              updatedAt: new Date().toISOString(),
+              synced: false,
+            }),
+          );
+        }
+      }
+
+      // حذف الدفعات المرتبطة
+      const payments = await reqToPromise(
+        payStore.index("invoice_id").getAll(invoiceId),
+      );
+      for (const p of payments) {
+        await reqToPromise(payStore.delete(p.id));
+      }
+
+      // حذف الفاتورة
+      await reqToPromise(invStore.delete(invoiceId));
+    },
+  );

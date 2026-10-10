@@ -30,7 +30,8 @@ import {
 import InventoryPage from "./pages/YahyaPharmacy"; // adjust path as needed
 import DebtsPage from "./pages/DebtsPage"; // adjust path as needed
 import SalesPage from "./pages/SalesPage";
-
+import PurchaseInvoicesPage from "./pages/PurchaseInvoicesPage"; // التأكد من مسار الملف
+import LocalShippingIcon from "@mui/icons-material/LocalShipping";
 // ─── Design tokens (single source of truth) ───────────────────────────────────
 
 const TOKENS = {
@@ -97,6 +98,13 @@ const VIEW_CONFIG = [
     labelAr: "الديون",
     icon: DebtsIcon,
     accent: TOKENS.amber,
+  },
+  {
+    key: "purchases",
+    labelEn: "Invoices",
+    labelAr: "الفواتير",
+    icon: LocalShippingIcon,
+    accent: TOKENS.navy,
   },
   {
     key: "sales",
@@ -774,6 +782,8 @@ function ViewRenderer({ currentView, selectedPharmacy }) {
   switch (currentView) {
     case "inventory":
       return <InventoryPage selectedPharmacy={selectedPharmacy} />;
+    case "purchases":
+      return <PurchaseInvoicesPage />;
     case "debts":
       return <DebtsPage selectedPharmacy={selectedPharmacy} />;
     case "sales":
@@ -782,7 +792,6 @@ function ViewRenderer({ currentView, selectedPharmacy }) {
       return null;
   }
 }
-
 // ─── Root App ─────────────────────────────────────────────────────────────────
 
 export default function App() {

@@ -249,51 +249,53 @@ const getLowStockStatus = (stockUnits) => {
 };
 
 const formatStockUnits = (medicine) => {
-  const stock = Math.max(0, Number(medicine?.stockUnits) || 0);
+  const displayed = Math.max(0, Number(medicine?.displayed_qty) || 0);
+  const storage = Math.max(0, Number(medicine?.storage_qty) || 0);
+  const total = displayed + storage;
 
   const isStripType = ["Tablets", "Ampoule", "Suppository"].includes(
     medicine?.type,
   );
 
-  if (!isStripType) {
-    return `${stock} Units`;
+  const formatPart = (qty) => {
+    if (!isStripType || qty === 0) return `${qty}`;
+    const stripsPerBox = Number(medicine?.stripsPerBox) || 0;
+    const pillsPerStrip = Number(medicine?.pillsPerStrip) || 0;
+    if (stripsPerBox <= 0 || pillsPerStrip <= 0) return `${qty}`;
+
+    const unitsPerBox = stripsPerBox * pillsPerStrip;
+    const boxes = Math.floor(qty / unitsPerBox);
+    const remainderAfterBoxes = qty % unitsPerBox;
+    const strips = Math.floor(remainderAfterBoxes / pillsPerStrip);
+    const pills = remainderAfterBoxes % pillsPerStrip;
+
+    const parts = [];
+    if (boxes > 0) parts.push(`${boxes} Boxes`);
+    if (strips > 0) parts.push(`${strips} Strips`);
+    if (pills > 0) parts.push(`${pills} Pills`);
+    return parts.length > 0 ? parts.join(" + ") : "0";
+  };
+
+  if (storage > 0 && displayed > 0) {
+    return `Displayed: ${formatPart(displayed)} | Storage: ${formatPart(
+      storage,
+    )}`;
   }
-
-  const stripsPerBox = Number(medicine?.stripsPerBox) || 0;
-  const pillsPerStrip = Number(medicine?.pillsPerStrip) || 0;
-
-  if (stripsPerBox <= 0 || pillsPerStrip <= 0) {
-    return `${stock} Units`;
-  }
-
-  const unitsPerBox = stripsPerBox * pillsPerStrip;
-
-  const boxes = Math.floor(stock / unitsPerBox);
-  const remainderAfterBoxes = stock % unitsPerBox;
-
-  const strips = Math.floor(remainderAfterBoxes / pillsPerStrip);
-  const pills = remainderAfterBoxes % pillsPerStrip;
-
-  const parts = [];
-
-  if (boxes > 0) parts.push(`${boxes} Boxes`);
-  if (strips > 0) parts.push(`${strips} Strips`);
-  if (pills > 0) parts.push(`${pills} Pills`);
-
-  return parts.length > 0 ? parts.join(" + ") : "0 Pills";
+  if (storage > 0) return `Storage: ${formatPart(storage)}`;
+  return `Displayed: ${formatPart(displayed)}`;
 };
 // ─── Add/Edit Dialog ──────────────────────────────────────────────────────────
 const EMPTY_FORM = {
   name: "",
   type: "",
-  stockUnits: "",
+  displayed_qty: "",
+  storage_qty: "",
   qrCode: "",
   stripsPerBox: "",
   pillsPerStrip: "",
   costPrice: "",
   sellPrice: "",
   company: "",
-  location: "معروض",
   expDate: "",
 };
 
@@ -305,8 +307,10 @@ function MedicineFormDialog({ open, onClose, onSave, initial, onOpenScanner }) {
   const valid =
     form.name.trim() &&
     form.type &&
-    form.stockUnits !== "" &&
-    Number(form.stockUnits) >= 0 &&
+    form.displayed_qty !== "" &&
+    Number(form.displayed_qty) >= 0 &&
+    form.storage_qty !== "" &&
+    Number(form.storage_qty) >= 0 &&
     form.costPrice !== "" &&
     form.sellPrice !== "";
 
@@ -407,21 +411,26 @@ function MedicineFormDialog({ open, onClose, onSave, initial, onOpenScanner }) {
             ))}
           </Select>
         </FormControl>
-        <TextField
-          label="Stock Units"
-          value={form.stockUnits}
-          onChange={set("stockUnits")}
-          required
-          fullWidth
-          size="small"
-          type="number"
-          inputProps={{ min: 0, step: 1 }}
-          helperText={
-            ["Tablets", "Ampoule", "Suppository"].includes(form.type)
-              ? "Enter the total number of pills/units in stock"
-              : "Enter the total number of units in stock"
-          }
-        />
+        <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
+          <TextField
+            label="Displayed Quantity"
+            value={form.displayed_qty}
+            onChange={set("displayed_qty")}
+            required
+            size="small"
+            type="number"
+            inputProps={{ min: 0, step: 1 }}
+          />
+          <TextField
+            label="Storage Quantity"
+            value={form.storage_qty}
+            onChange={set("storage_qty")}
+            required
+            size="small"
+            type="number"
+            inputProps={{ min: 0, step: 1 }}
+          />
+        </Box>
         {["Tablets", "Ampoule", "Suppository"].includes(form.type) && (
           <>
             <Box
@@ -478,19 +487,6 @@ function MedicineFormDialog({ open, onClose, onSave, initial, onOpenScanner }) {
           />
         </Box>
 
-        <FormControl fullWidth size="small">
-          <InputLabel>Location</InputLabel>
-
-          <Select
-            value={form.location || "معروض"}
-            label="Location"
-            onChange={set("location")}
-          >
-            <MenuItem value="معروض">معروض</MenuItem>
-
-            <MenuItem value="مخزون">مخزون</MenuItem>
-          </Select>
-        </FormControl>
         <TextField
           label="Company Name"
           value={form.company}
@@ -819,29 +815,13 @@ function MedicineDetailsDialog({
 // ─── Medicine Card ────────────────────────────────────────────────────────────
 
 const MedicineCard = React.memo(({ medicine, onClick }) => {
-  const locationCfg =
-    medicine.location === "مخزون"
-      ? {
-          label: "مخزون",
-          color: "#F59E0B",
-          bg: "rgba(245,158,11,0.12)",
-          border: "rgba(245,158,11,0.25)",
-        }
-      : {
-          label: "معروض",
-          color: "#10B981",
-          bg: "rgba(16,185,129,0.12)",
-          border: "rgba(16,185,129,0.25)",
-        };
-
   const cfg = getTypeConfig(medicine.type);
   const stock = getLowStockStatus(medicine.stockUnits);
-  const displayValue = (val) =>
-    val !== undefined && val !== null && val !== "" ? val : "Unknown";
 
   const handleClick = React.useCallback(() => {
     onClick(medicine);
   }, [medicine, onClick]);
+
   return (
     <Card
       elevation={0}
@@ -849,23 +829,8 @@ const MedicineCard = React.memo(({ medicine, onClick }) => {
         transition: "none",
         position: "relative",
         overflow: "hidden",
-        bgcolor:
-          medicine.location === "مخزون"
-            ? "rgba(245,158,11,0.03)"
-            : "rgba(16,185,129,0.03)",
-        border:
-          medicine.location === "مخزون"
-            ? "1px solid rgba(245,158,11,0.12)"
-            : "1px solid rgba(16,185,129,0.12)",
-        "&::before": {
-          content: '""',
-          position: "absolute",
-          left: 0,
-          top: 0,
-          bottom: 0,
-          width: 4,
-          bgcolor: medicine.location === "مخزون" ? "#F59E0B" : "#0F9F6E",
-        },
+        bgcolor: "#FFFFFF",
+        border: "1px solid #E8EDF4",
       }}
     >
       <CardActionArea
@@ -938,77 +903,42 @@ const MedicineCard = React.memo(({ medicine, onClick }) => {
                 mt: 1,
               }}
             >
-              <Box
-                sx={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 1,
-                  minWidth: 0,
-                }}
+              <Typography
+                variant="caption"
+                sx={{ color: "text.secondary", fontWeight: 500 }}
               >
-                <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                  {medicine.type}
-                </Typography>
+                {medicine.type}
+              </Typography>
 
-                {medicine.company && (
-                  <>
-                    <Box
-                      sx={{
-                        width: 4,
-                        height: 4,
-                        borderRadius: "50%",
-                        bgcolor: "text.secondary",
-                        opacity: 0.4,
-                      }}
-                    />
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        color: "text.secondary",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {medicine.company}
-                    </Typography>
-                  </>
-                )}
-              </Box>
-
-              <Box
-                sx={{
-                  px: 1.25,
-                  py: 0.45,
-                  borderRadius: "999px",
-                  bgcolor: locationCfg.bg,
-                  border: `1px solid ${locationCfg.border}`,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 0.7,
-                  flexShrink: 0,
-                }}
-              >
+              {/* إبراز اسم الشركة بدلاً من معروض/مخزون */}
+              {medicine.company && (
                 <Box
                   sx={{
-                    width: 7,
-                    height: 7,
-                    borderRadius: "50%",
-                    bgcolor: locationCfg.color,
-                    boxShadow: `0 0 10px ${locationCfg.color}`,
-                  }}
-                />
-                <Typography
-                  sx={{
-                    fontSize: 10,
-                    fontWeight: 700,
-                    color: locationCfg.color,
-                    letterSpacing: 0.3,
+                    px: 1.25,
+                    py: 0.4,
+                    borderRadius: "8px",
+                    bgcolor: "#F1F5F9",
+                    border: "1px solid #E2E8F0",
+                    display: "flex",
+                    alignItems: "center",
+                    flexShrink: 0,
+                    maxWidth: "60%",
                   }}
                 >
-                  {locationCfg.label}
-                </Typography>
-              </Box>
+                  <Typography
+                    sx={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: "#475467",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {medicine.company}
+                  </Typography>
+                </Box>
+              )}
             </Box>
 
             <Box
@@ -1143,9 +1073,8 @@ export default function InventoryPage({ selectedPharmacy = "old" }) {
     }
   };
 
-  const [sortDirection, setSortDirection] = useState("desc");
-  const LOCATION_FILTERS = ["All", "Stored", "Displayed"];
-
+  const [sortDirection, setSortDirection] = useState("asc");
+  const LOCATION_FILTERS = ["All", "معروض", "مخزون"];
   const companyFilters = useMemo(() => {
     const companies = medicines
       .filter(
@@ -1167,7 +1096,7 @@ export default function InventoryPage({ selectedPharmacy = "old" }) {
   );
 
   useEffect(() => {
-    if (locationFilter !== "Stored") {
+    if (locationFilter !== "مخزون") {
       setCompanyFilter("All");
     }
   }, [locationFilter]);
@@ -1238,20 +1167,23 @@ export default function InventoryPage({ selectedPharmacy = "old" }) {
 
       const matchLocation =
         locationFilter === "All" ||
-        (locationFilter === "Stored" && m.location === "مخزون") ||
-        (locationFilter === "Displayed" && m.location === "معروض");
+        (locationFilter === "مخزون" && (Number(m.storage_qty) || 0) > 0) ||
+        (locationFilter === "معروض" && (Number(m.displayed_qty) || 0) > 0);
 
       const matchCompany =
-        locationFilter !== "Stored" ||
+        locationFilter !== "مخزون" ||
         companyFilter === "All" ||
         String(m.company || "").trim() === companyFilter;
 
       return matchSearch && matchType && matchLocation && matchCompany;
     });
     return result.sort((a, b) => {
-      return sortDirection === "desc"
-        ? b.costPrice - a.costPrice
-        : a.costPrice - b.costPrice;
+      const nameA = String(a.name || "").toLocaleLowerCase("ar");
+      const nameB = String(b.name || "").toLocaleLowerCase("ar");
+      if (sortDirection === "desc") {
+        return nameB.localeCompare(nameA, "ar");
+      }
+      return nameA.localeCompare(nameB, "ar");
     });
   }, [
     medicines,
@@ -1266,7 +1198,8 @@ export default function InventoryPage({ selectedPharmacy = "old" }) {
     let totalSell = 0;
 
     filtered.forEach((m) => {
-      const stockUnits = Number(m.stockUnits) || 0;
+      const stockUnits =
+        (Number(m.displayed_qty) || 0) + (Number(m.storage_qty) || 0);
       const cost = Number(m.costPrice) || 0;
       const unitSell = Number(m.sellPrice) || 0;
 
@@ -1302,7 +1235,6 @@ export default function InventoryPage({ selectedPharmacy = "old" }) {
       const exists = medicines.find(
         (m) =>
           normalizeQr(m.qrCode) === qrCode &&
-          m.location === form.location &&
           getMedicinePharmacy(m) === selectedPharmacy,
       );
 
@@ -1311,20 +1243,21 @@ export default function InventoryPage({ selectedPharmacy = "old" }) {
         return;
       }
     }
+    const displayed = Number(form.displayed_qty) || 0;
+    const storage = Number(form.storage_qty) || 0;
+
     const newMedicine = {
       ...form,
       id: uuidv4(),
-
       pharmacy: selectedPharmacy,
-
-      stockUnits: Number(form.stockUnits),
+      displayed_qty: displayed,
+      storage_qty: storage,
+      stockUnits: displayed + storage, // للتوافق مع الكود القديم مؤقتًا
       qrCode,
       stripsPerBox: Number(form.stripsPerBox) || 0,
       pillsPerStrip: Number(form.pillsPerStrip) || 0,
-
       costPrice: Number(form.costPrice),
       sellPrice: Number(form.sellPrice),
-
       updatedAt: new Date().toISOString(),
       deleted: false,
       synced: false,
@@ -1348,30 +1281,31 @@ export default function InventoryPage({ selectedPharmacy = "old" }) {
       const exists = medicines.find(
         (m) =>
           normalizeQr(m.qrCode) === qrCode &&
-          m.location === form.location &&
-          m.id !== editMed.id,
+          m.id !== editMed.id &&
+          getMedicinePharmacy(m) === selectedPharmacy,
       );
 
       if (exists) {
-        alert("QR Code already exists in this location");
+        alert("QR Code already exists");
         return;
       }
     }
 
+    const displayed = Number(form.displayed_qty) || 0;
+    const storage = Number(form.storage_qty) || 0;
+
     const updatedMedicine = {
       ...editMed,
       ...form,
-
       pharmacy: selectedPharmacy,
-
-      stockUnits: Number(form.stockUnits),
+      displayed_qty: displayed,
+      storage_qty: storage,
+      stockUnits: displayed + storage,
       qrCode,
       stripsPerBox: Number(form.stripsPerBox) || 0,
       pillsPerStrip: Number(form.pillsPerStrip) || 0,
-
       costPrice: Number(form.costPrice),
       sellPrice: Number(form.sellPrice),
-
       updatedAt: new Date().toISOString(),
       synced: false,
     };
@@ -1409,21 +1343,20 @@ export default function InventoryPage({ selectedPharmacy = "old" }) {
       syncMedicines().catch(console.error);
     }
   };
+
   const openEdit = (med) => {
     setEditScannedQr("");
 
     setEditMed({
       ...med,
-
-      stockUnits: String(med.stockUnits ?? ""),
+      displayed_qty: String(med.displayed_qty ?? 0),
+      storage_qty: String(med.storage_qty ?? 0),
       stripsPerBox: String(med.stripsPerBox ?? ""),
       pillsPerStrip: String(med.pillsPerStrip ?? ""),
-
       costPrice: String(med.costPrice ?? ""),
       sellPrice: String(med.sellPrice ?? ""),
     });
   };
-
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
@@ -1551,7 +1484,7 @@ export default function InventoryPage({ selectedPharmacy = "old" }) {
                 ))}
               </Select>
             </FormControl>
-            {locationFilter === "Stored" && (
+            {locationFilter === "مخزون" && (
               <FormControl fullWidth size="small">
                 <InputLabel>Company</InputLabel>
 
@@ -1577,7 +1510,7 @@ export default function InventoryPage({ selectedPharmacy = "old" }) {
               onClick={() =>
                 setSortDirection((prev) => (prev === "desc" ? "asc" : "desc"))
               }
-              startIcon={<Sort sx={{ fontSize: 18 }} />}
+              startIcon={<Sort sx={{ fontSize: 14 }} />}
               endIcon={
                 sortDirection === "desc" ? (
                   <ArrowDownward sx={{ fontSize: 14, color: "#DC2626" }} />
@@ -1589,7 +1522,7 @@ export default function InventoryPage({ selectedPharmacy = "old" }) {
                 whiteSpace: "nowrap",
                 borderRadius: "14px",
                 height: "40px",
-                px: 2,
+                px: 1,
                 borderColor: "#DDE5EF",
                 bgcolor: "#FFFFFF",
                 color: "text.primary",
@@ -1867,7 +1800,7 @@ export default function InventoryPage({ selectedPharmacy = "old" }) {
                       setDetailMed(medicine);
                     }}
                   >
-                    {medicine.location === "معروض" ? "Displayed" : "Stored"}
+                    {medicine.location === "معروض" ? "Displayed" : "مخزون"}
                   </Button>
                 ))}
               </Box>

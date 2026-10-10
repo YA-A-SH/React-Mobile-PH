@@ -330,3 +330,78 @@ export async function syncAll() {
   await syncMedicines();
   await syncSales();
 }
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Purchase Invoices Sync
+// ═════════════════════════════════════════════════════════════════════════════
+
+export async function uploadUnsyncedPurchaseInvoices() {
+  if (!navigator.onLine) return;
+
+  const invoices = await getAllPurchaseInvoicesDB();
+  const unsynced = invoices.filter((inv) => inv.synced === false);
+
+  if (unsynced.length === 0) return;
+
+  for (const inv of unsynced) {
+    // 1. إرسال الفاتورة الرئيسية
+    const payloadInvoice = {
+      id: inv.id,
+      pharmacy: inv.pharmacy || "old",
+      supplier_name: inv.supplierName,
+      invoice_number: inv.invoiceNumber || null,
+      date: inv.date,
+      notes: inv.notes || null,
+      total_amount: inv.totalAmount,
+      paid_amount: inv.paidAmount,
+      payment_status: inv.paymentStatus,
+      updated_at: new Date().toISOString(),
+      synced: true,
+    };
+
+    const { error: invErr } = await supabase
+      .from("purchase_invoices")
+      .upsert(payloadInvoice);
+    if (invErr) {
+      console.error("Failed to sync invoice:", invErr);
+      continue;
+    }
+
+    if (inv.items && inv.items.length > 0) {
+      const itemsPayload = inv.items.map((it) => ({
+        invoice_id: inv.id,
+        medicine_id: it.medicineId,
+        medicine_name: it.name,
+        quantity_storage: it.storageQty,
+        quantity_displayed: it.displayedQty,
+        cost_price: it.costPrice,
+        sell_price: it.sellPrice,
+      }));
+
+      const { error: itemsErr } = await supabase
+        .from("purchase_invoice_items")
+        .upsert(itemsPayload);
+      if (itemsErr) console.error("Failed to sync invoice items:", itemsErr);
+    }
+
+    const payments = await getPurchasePaymentsDB(inv.id);
+    if (payments && payments.length > 0) {
+      const paymentsPayload = payments.map((p) => ({
+        id: p.id,
+        invoice_id: inv.id,
+        amount: p.amount,
+        payment_type: p.paymentType,
+        transfer_from: p.transferFrom || null,
+        receiver: p.receiver || null,
+        destination_account: p.destinationAccount || null,
+        date: p.date,
+        notes: p.notes || null,
+      }));
+
+      const { error: payErr } = await supabase
+        .from("purchase_payments")
+        .upsert(paymentsPayload);
+      if (payErr) console.error("Failed to sync invoice payments:", payErr);
+    }
+  }
+}
