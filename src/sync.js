@@ -28,9 +28,7 @@ const chunk = (arr, size) => {
 
 export const uploadUnsyncedMedicines = async () => {
   const medicines = await getAllMedicines();
-  // Strict `=== false`: rows downloaded by older versions have no `synced` flag
-  // and must NOT be re-uploaded (that could overwrite newer server data).
-  const unsynced = medicines.filter((m) => m.synced === false && !m.deleted);
+  const unsynced = medicines.filter((m) => m.synced === false);
 
   if (unsynced.length === 0) return;
 
@@ -44,8 +42,6 @@ export const uploadUnsyncedMedicines = async () => {
       return;
     }
 
-    // Only flips to synced if the row was not changed again during the upload
-    // (e.g. by a sale) – otherwise the newer local change stays queued.
     await markMedicinesSyncedDB(
       batch.map((m) => ({ id: m.id, updatedAt: m.updatedAt })),
     );
