@@ -1168,7 +1168,7 @@ export default function InventoryPage({ selectedPharmacy = "old" }) {
       const matchLocation =
         locationFilter === "All" ||
         (locationFilter === "مخزون" && (Number(m.storage_qty) || 0) > 0) ||
-        (locationFilter === "معروض" && (Number(m.displayed_qty) || 0) > 0);
+        locationFilter === "معروض";
 
       const matchCompany =
         locationFilter !== "مخزون" ||

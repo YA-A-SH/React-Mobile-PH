@@ -2047,12 +2047,7 @@ export default function SalesPage({ selectedPharmacy = "old" }) {
     () =>
       medicines
         .filter(
-          (m) =>
-            !m.deleted &&
-            getMedicinePharmacy(m) === selectedPharmacy &&
-            (selectedPharmacy !== "old" ||
-              !m.location ||
-              m.location === "معروض"),
+          (m) => !m.deleted && getMedicinePharmacy(m) === selectedPharmacy,
         )
         .sort((a, b) =>
           String(a.name || "").localeCompare(String(b.name || "")),
