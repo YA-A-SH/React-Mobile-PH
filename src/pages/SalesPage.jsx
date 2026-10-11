@@ -915,8 +915,15 @@ function SaleDetailsDialog({
                   >
                     {[
                       {
-                        l: `Price / ${describeItemPriceUnit(item)}`,
-                        v: `ILS ${money(item.sell_price)}`,
+                        l:
+                          item.price_mode === "total"
+                            ? "Manual total price"
+                            : `Price / ${describeItemPriceUnit(item)}`,
+                        v: `ILS ${money(
+                          item.price_mode === "total"
+                            ? item.manual_total_price ?? item.line_total
+                            : item.sell_price,
+                        )}`,
                         c: "text.primary",
                       },
                       {
@@ -1059,8 +1066,18 @@ function SaleLineCard({
   const cfg = getTypeConfig(medicine.type);
   const piece = pieceLabel(medicine.type);
   const stock = checkStock(stockMedicine || medicine, line);
-  const calc = computeLine(medicine, line, line.price);
-  const priceInvalid = line.price === "" || !(Number(line.price) >= 0);
+  const priceInvalid =
+    line.priceMode === "total"
+      ? line.totalPrice === "" ||
+        !Number.isFinite(Number(line.totalPrice)) ||
+        Number(line.totalPrice) < 0
+      : line.price === "" ||
+        !Number.isFinite(Number(line.price)) ||
+        Number(line.price) < 0;
+  const calc = computeLine(medicine, line, line.price, {
+    priceMode: line.priceMode,
+    totalPrice: line.totalPrice,
+  });
   const showStockError = !stock.ok && stock.code !== "EMPTY";
   const showEmpty = !stock.ok && stock.code === "EMPTY";
 
@@ -1171,24 +1188,63 @@ function SaleLineCard({
         )}
       </Box>
 
-      <TextField
-        size="small"
+      <ToggleButtonGroup
+        exclusive
         fullWidth
-        type="number"
-        label={`Sell price per ${pk.priceUnit}`}
-        value={line.price}
-        onChange={(e) => onChange({ price: e.target.value })}
-        error={priceInvalid}
-        helperText={priceInvalid ? "Enter a valid price" : undefined}
-        slotProps={{
-          input: {
-            startAdornment: (
-              <InputAdornment position="start">ILS</InputAdornment>
-            ),
-          },
-          htmlInput: { min: 0, step: "0.01", inputMode: "decimal" },
+        size="small"
+        value={line.priceMode || "unit"}
+        onChange={(_, value) => {
+          if (value) onChange({ priceMode: value });
         }}
-      />
+        sx={{ mb: 1.25, "& .MuiToggleButton-root": { textTransform: "none" } }}
+      >
+        <ToggleButton value="unit">Automatic unit price</ToggleButton>
+        <ToggleButton value="total">Total price for this quantity</ToggleButton>
+      </ToggleButtonGroup>
+
+      {line.priceMode === "total" ? (
+        <TextField
+          size="small"
+          fullWidth
+          type="number"
+          label="Total price for the whole line"
+          value={line.totalPrice ?? ""}
+          onChange={(e) => onChange({ totalPrice: e.target.value })}
+          error={priceInvalid}
+          helperText={
+            priceInvalid
+              ? "Enter a valid total price"
+              : "This amount is charged once for the entire quantity above."
+          }
+          slotProps={{
+            input: {
+              startAdornment: (
+                <InputAdornment position="start">ILS</InputAdornment>
+              ),
+            },
+            htmlInput: { min: 0, step: "0.01", inputMode: "decimal" },
+          }}
+        />
+      ) : (
+        <TextField
+          size="small"
+          fullWidth
+          type="number"
+          label={`Sell price per ${pk.priceUnit}`}
+          value={line.price}
+          onChange={(e) => onChange({ price: e.target.value })}
+          error={priceInvalid}
+          helperText={priceInvalid ? "Enter a valid price" : undefined}
+          slotProps={{
+            input: {
+              startAdornment: (
+                <InputAdornment position="start">ILS</InputAdornment>
+              ),
+            },
+            htmlInput: { min: 0, step: "0.01", inputMode: "decimal" },
+          }}
+        />
+      )}
 
       {showStockError && (
         <Alert severity="error" sx={{ mt: 1.25, py: 0, borderRadius: "12px" }}>
@@ -1331,6 +1387,11 @@ function AddSaleDialog({
         strips: String(item.quantity_strips || ""),
         pills: String(item.quantity_pills || ""),
         price: String(item.sell_price ?? ""),
+        priceMode: item.price_mode === "total" ? "total" : "unit",
+        totalPrice:
+          item.price_mode === "total"
+            ? String(item.manual_total_price ?? item.line_total ?? "")
+            : "",
       })),
     );
   }, [open, editSale, editItems]);
@@ -1398,6 +1459,8 @@ function AddSaleDialog({
         medicineId: med.id,
         ...q,
         price: String(getPackaging(med).defaultPrice),
+        priceMode: "unit",
+        totalPrice: "",
       },
     ]);
   };
@@ -1448,11 +1511,21 @@ function AddSaleDialog({
 
     const stockMed = getStockMedicineForEdit(med);
     const stock = checkStock(stockMed, l);
-    const priceOk = l.price !== "" && Number(l.price) >= 0;
+    const priceOk =
+      l.priceMode === "total"
+        ? l.totalPrice !== "" &&
+          Number.isFinite(Number(l.totalPrice)) &&
+          Number(l.totalPrice) >= 0
+        : l.price !== "" &&
+          Number.isFinite(Number(l.price)) &&
+          Number(l.price) >= 0;
 
     return {
       ok: stock.ok && priceOk,
-      calc: computeLine(med, l, l.price),
+      calc: computeLine(med, l, l.price, {
+        priceMode: l.priceMode,
+        totalPrice: l.totalPrice,
+      }),
     };
   });
   const allLinesOk = lines.length > 0 && lineStates.every((s) => s.ok);
@@ -1484,6 +1557,8 @@ function AddSaleDialog({
           strips: l.strips,
           pills: l.pills,
           price: Number(l.price),
+          priceMode: l.priceMode === "total" ? "total" : "unit",
+          totalPrice: l.priceMode === "total" ? Number(l.totalPrice) : null,
         })),
       });
     } catch (err) {

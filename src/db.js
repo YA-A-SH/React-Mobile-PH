@@ -552,8 +552,9 @@ export const updateSaleWithStockDB = (id, pharmacy, input) =>
         }
 
         const price = Number(line.price);
+        const priceMode = line.priceMode === "total" ? "total" : "unit";
 
-        if (!Number.isFinite(price) || price < 0) {
+        if (priceMode === "unit" && (!Number.isFinite(price) || price < 0)) {
           throw new SaleError(
             "INVALID_PRICE",
             `Enter a valid price for "${med.name}".`,
@@ -568,7 +569,22 @@ export const updateSaleWithStockDB = (id, pharmacy, input) =>
           });
         }
 
-        const calc = computeLine(med, line, price);
+        const totalPrice = Number(line.totalPrice);
+        if (
+          priceMode === "total" &&
+          (line.totalPrice === "" ||
+            !Number.isFinite(totalPrice) ||
+            totalPrice < 0)
+        ) {
+          throw new SaleError(
+            "INVALID_PRICE",
+            `Enter a valid total price for "${med.name}".`,
+          );
+        }
+        const calc = computeLine(med, line, price, {
+          priceMode,
+          totalPrice,
+        });
 
         // Reuse the old item ID when the medicine already existed.
         // This is important for syncing edited sale_items.
@@ -587,6 +603,8 @@ export const updateSaleWithStockDB = (id, pharmacy, input) =>
           quantity_in_base_units: calc.base,
 
           sell_price: calc.sellPrice,
+          price_mode: calc.priceMode,
+          manual_total_price: calc.manualTotalPrice,
           cost_at_sale: calc.costAtSale,
 
           line_total: calc.lineTotal,
@@ -791,7 +809,8 @@ export const createSaleDB = (input) =>
           );
 
         const price = Number(line.price);
-        if (!Number.isFinite(price) || price < 0)
+        const priceMode = line.priceMode === "total" ? "total" : "unit";
+        if (priceMode === "unit" && (!Number.isFinite(price) || price < 0))
           throw new SaleError(
             "INVALID_PRICE",
             `Enter a valid price for "${med.name}".`,
@@ -803,7 +822,22 @@ export const createSaleDB = (input) =>
             medicineId: med.id,
           });
 
-        const calc = computeLine(med, line, price);
+        const totalPrice = Number(line.totalPrice);
+        if (
+          priceMode === "total" &&
+          (line.totalPrice === "" ||
+            !Number.isFinite(totalPrice) ||
+            totalPrice < 0)
+        ) {
+          throw new SaleError(
+            "INVALID_PRICE",
+            `Enter a valid total price for "${med.name}".`,
+          );
+        }
+        const calc = computeLine(med, line, price, {
+          priceMode,
+          totalPrice,
+        });
         items.push({
           id: uuidv4(),
           sale_id: saleId,
@@ -814,7 +848,9 @@ export const createSaleDB = (input) =>
           quantity_strips: calc.strips,
           quantity_pills: calc.pills,
           quantity_in_base_units: calc.base,
-          sell_price: calc.sellPrice, // price the user charged (Inventory unit)
+          sell_price: calc.sellPrice, // effective price in the Inventory's pricing unit
+          price_mode: calc.priceMode,
+          manual_total_price: calc.manualTotalPrice,
           cost_at_sale: calc.costAtSale, // medicine.costPrice AT THE TIME OF SALE
           line_total: calc.lineTotal,
           line_cost: calc.lineCost,

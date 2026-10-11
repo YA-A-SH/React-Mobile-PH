@@ -256,17 +256,35 @@ export const applyDeduction = (med, q) => {
  *   line_total = base units × (price ÷ base units covered by that price)
  *   line_cost  = base units × (costPrice ÷ base units per box)
  */
-export const computeLine = (med, q, priceEntered) => {
+export const computeLine = (
+  med,
+  q,
+  priceEntered,
+  { priceMode = "unit", totalPrice } = {},
+) => {
   const pk = getPackaging(med);
   const n = normalizeQuantity(med, q);
-  const price = Math.max(0, num(priceEntered));
-  const sellPerBase = price / pk.priceBaseCount;
+  const enteredPrice = Math.max(0, num(priceEntered));
+  const manualTotal = Math.max(0, num(totalPrice));
   const costPerBase = num(med?.costPrice) / pk.unitsPerBox;
-  const lineTotal = round2(n.base * sellPerBase);
+
+  // In total mode, the entered amount is for the WHOLE line, not each unit.
+  // Keep an equivalent unit price for compatibility with existing reports.
+  const effectiveUnitPrice =
+    priceMode === "total" && n.base > 0
+      ? (manualTotal / n.base) * pk.priceBaseCount
+      : enteredPrice;
+  const lineTotal =
+    priceMode === "total"
+      ? round2(manualTotal)
+      : round2(n.base * (enteredPrice / pk.priceBaseCount));
   const lineCost = round2(n.base * costPerBase);
+
   return {
     ...n,
-    sellPrice: round4(price),
+    sellPrice: round4(effectiveUnitPrice),
+    priceMode: priceMode === "total" ? "total" : "unit",
+    manualTotalPrice: priceMode === "total" ? round2(manualTotal) : null,
     costAtSale: num(med?.costPrice),
     lineTotal,
     lineCost,
