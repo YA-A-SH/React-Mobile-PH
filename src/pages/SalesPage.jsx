@@ -2237,11 +2237,22 @@ export default function SalesPage({ selectedPharmacy = "old" }) {
   const handleCreateSale = async (form) => {
     if (!readIsAdmin()) throw new Error("Only an admin can add sales.");
     // pharmacy comes from the app-level selection, never from the form
+
+    const now = new Date();
+
+    const saleDate = new Date(
+      `${selectedDate}T${String(now.getHours()).padStart(2, "0")}:${String(
+        now.getMinutes(),
+      ).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`,
+    );
+
     const { sale } = await createSaleDB({
       ...form,
       pharmacy: selectedPharmacy,
       createdBy: "admin",
+      createdAt: saleDate.toISOString(),
     });
+
     setAddOpen(false);
     // Show the new sale: jump to today if another date was being viewed
     if (selectedDate !== toDateKey(sale.created_at))

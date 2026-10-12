@@ -855,7 +855,9 @@ export const createSaleDB = (input) =>
           line_total: calc.lineTotal,
           line_cost: calc.lineCost,
           line_profit: calc.lineProfit,
-          created_at: now,
+          created_at: input.createdAt
+            ? new Date(input.createdAt).toISOString()
+            : now,
           synced: false,
         });
 
@@ -889,7 +891,9 @@ export const createSaleDB = (input) =>
         total,
         total_cost: totalCost,
         total_profit: round2(total - totalCost),
-        created_at: now,
+        created_at: input.createdAt
+          ? new Date(input.createdAt).toISOString()
+          : now,
         updated_at: now,
         created_by: input.createdBy || "admin",
         synced: false,
@@ -1227,7 +1231,6 @@ export const deletePurchaseInvoiceDB = (invoiceId) =>
         }
       }
 
-      // حذف الدفعات المرتبطة
       const payments = await reqToPromise(
         payStore.index("invoice_id").getAll(invoiceId),
       );
@@ -1235,7 +1238,6 @@ export const deletePurchaseInvoiceDB = (invoiceId) =>
         await reqToPromise(payStore.delete(p.id));
       }
 
-      // حذف الفاتورة
       await reqToPromise(invStore.delete(invoiceId));
     },
   );
