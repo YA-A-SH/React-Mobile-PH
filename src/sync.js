@@ -121,6 +121,25 @@ export async function syncMedicines() {
     // 2) Save server copies, but never overwrite rows with pending local changes.
     const { skipped } = await mergeServerMedicinesDB(allMeds);
 
+    // ── تنظيف الأدوية اللي انحذفت على السيرفر (من جهاز ثاني) ──
+    const serverIds = new Set(allMeds.map((m) => m.id));
+    const localMeds = await getAllMedicines();
+
+    for (const local of localMeds) {
+      // إذا السجل محلي ومتزامن وما عاد موجود على السيرفر → انحذف من جهاز آخر
+      if (
+        local.synced !== false &&
+        !serverIds.has(local.id) &&
+        !local.deleted
+      ) {
+        await saveMedicineDB({
+          ...local,
+          deleted: true,
+          synced: true,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+    }
     console.log(
       `Successfully synced ${allMeds.length} medicines!` +
         (skipped ? ` (${skipped} kept: pending local changes)` : ""),
