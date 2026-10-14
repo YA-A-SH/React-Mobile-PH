@@ -482,6 +482,7 @@ function MarkReceivedControl({ onChange, compact, received }) {
 const SaleCard = React.memo(function SaleCard({
   sale,
   itemCount,
+  items = [],
   isAdmin,
   onOpen,
   onMarkReceived,
@@ -664,6 +665,61 @@ const SaleCard = React.memo(function SaleCard({
               <StatusChip status={sale.payment_status} />
             )}{" "}
           </Box>
+          {/* أول صنفين من البيعة */}
+          {items.length > 0 && (
+            <Box
+              sx={{
+                mt: 0.5,
+                display: "flex",
+                flexDirection: "column",
+                gap: 0.4,
+              }}
+            >
+              {items.slice(0, 2).map((item) => (
+                <Typography
+                  key={item.id}
+                  sx={{
+                    fontSize: 12.5,
+                    color: "text.secondary",
+                    lineHeight: 1.3,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 0.6,
+                  }}
+                  noWrap
+                >
+                  <Box
+                    component="span"
+                    sx={{
+                      width: 5,
+                      height: 5,
+                      borderRadius: "50%",
+                      bgcolor: "primary.light",
+                      flexShrink: 0,
+                    }}
+                  />
+                  {item.medicine_name}
+                  <Box
+                    component="span"
+                    sx={{ color: "text.disabled", fontSize: 11.5 }}
+                  >
+                    · {formatItemQuantity(item)}
+                  </Box>
+                </Typography>
+              ))}
+              {items.length > 2 && (
+                <Typography
+                  sx={{
+                    fontSize: 11.5,
+                    color: "text.disabled",
+                    pl: 1.4,
+                  }}
+                >
+                  +{items.length - 2} more
+                </Typography>
+              )}
+            </Box>
+          )}
         </CardContent>
       </CardActionArea>
 
@@ -2770,6 +2826,7 @@ export default function SalesPage({ selectedPharmacy = "old" }) {
                 <SaleCard
                   key={s.id}
                   sale={s}
+                  items={itemsBySale[s.id] || []} 
                   itemCount={(itemsBySale[s.id] || []).length}
                   isAdmin={isAdmin}
                   onOpen={handleOpenDetails}
