@@ -896,9 +896,9 @@ export const createSaleDB = (input) =>
           : now,
         updated_at: now,
         created_by: input.createdBy || "admin",
+        sale_status: "completed", // ← أضف هذا السطر
         synced: false,
       };
-
       // ── all validation passed: write everything (same transaction) ──
       await reqToPromise(tx.objectStore(SALES_STORE).put(sale));
       const itemStore = tx.objectStore(SALE_ITEMS_STORE);

@@ -171,6 +171,9 @@ const normalizeServerItem = (i) => ({
   quantity_pills: Number(i.quantity_pills) || 0,
   quantity_in_base_units: Number(i.quantity_in_base_units) || 0,
   sell_price: Number(i.sell_price) || 0,
+  price_mode: i.price_mode || "unit",
+  manual_total_price:
+    i.manual_total_price == null ? null : Number(i.manual_total_price),
   cost_at_sale: Number(i.cost_at_sale) || 0,
   line_total: Number(i.line_total) || 0,
   line_cost: Number(i.line_cost) || 0,
@@ -186,34 +189,84 @@ export const uploadUnsyncedSales = async () => {
     const items = await getSaleItemsBySaleIdsDB(batch.map((s) => s.id));
     const unsyncedItems = items.filter((i) => i.synced === false);
 
-    // 1) parents
+    // 1) parents — فقط أعمدة جدول sales الموجودة في Supabase
+    const salesPayload = batch.map((s) => ({
+      id: s.id,
+      pharmacy: s.pharmacy,
+      customer_name: s.customer_name ?? null,
+      customer_phone: s.customer_phone ?? null,
+      payment_type: s.payment_type,
+      transfer_from: s.transfer_from ?? null,
+      receiver: s.receiver ?? null,
+      destination_account: s.destination_account ?? null,
+      payment_status: s.payment_status,
+      total: Number(s.total) || 0,
+      total_cost: Number(s.total_cost) || 0,
+      total_profit: Number(s.total_profit) || 0,
+      created_at: s.created_at,
+      updated_at: s.updated_at || s.created_at,
+      created_by: s.created_by ?? null,
+      sale_status: s.sale_status || "completed",
+    }));
+
     const { error: saleError } = await supabase
       .from("sales")
-      .upsert(batch.map(({ synced, ...rest }) => rest));
+      .upsert(salesPayload);
     if (saleError) {
       console.error("Sales upload failed:", saleError);
       return false;
     }
 
-    // 2) children (only after their sales exist on the server)
-    for (const itemBatch of chunk(unsyncedItems, 500)) {
+    // 2) children — فقط أعمدة sale_items (بدون updated_at)
+    const itemsPayload = unsyncedItems.map((it) => ({
+      id: it.id,
+      sale_id: it.sale_id,
+      medicine_id: it.medicine_id,
+      medicine_name: it.medicine_name,
+      medicine_type: it.medicine_type ?? null,
+      quantity_boxes: Number(it.quantity_boxes) || 0,
+      quantity_strips: Number(it.quantity_strips) || 0,
+      quantity_pills: Number(it.quantity_pills) || 0,
+      quantity_in_base_units: Number(it.quantity_in_base_units) || 0,
+      sell_price: Number(it.sell_price) || 0,
+      cost_at_sale: Number(it.cost_at_sale) || 0,
+      line_total: Number(it.line_total) || 0,
+      line_cost: Number(it.line_cost) || 0,
+      line_profit: Number(it.line_profit) || 0,
+      created_at: it.created_at || new Date().toISOString(),
+      price_mode: it.price_mode || "unit",
+      manual_total_price:
+        it.manual_total_price == null ? null : Number(it.manual_total_price),
+    }));
+
+    for (const itemBatch of chunk(itemsPayload, 500)) {
       const { error: itemError } = await supabase
         .from("sale_items")
-        .upsert(itemBatch.map(({ synced, ...rest }) => rest));
+        .upsert(itemBatch);
       if (itemError) {
         console.error("Sale items upload failed:", itemError);
-        return false; // sales stay flagged unsynced → retried next time (upsert is idempotent)
+        return false;
       }
     }
 
+    const saleIdsWithItems = new Set(items.map((i) => i.sale_id));
+    const salesReady = batch.filter((s) => {
+      if (!saleIdsWithItems.has(s.id)) {
+        console.warn("Sale has no local items; leaving unsynced:", s.id);
+        return false;
+      }
+      return true;
+    });
+
     await markSaleItemsSyncedDB(unsyncedItems.map((i) => i.id));
-    await markSalesSyncedDB(
-      batch.map((s) => ({ id: s.id, updated_at: s.updated_at })),
-    );
+    if (salesReady.length > 0) {
+      await markSalesSyncedDB(
+        salesReady.map((s) => ({ id: s.id, updated_at: s.updated_at })),
+      );
+    }
   }
   return true;
 };
-
 export const uploadDeletedSales = async () => {
   const deletedSales = await getDeletedSalesDB();
 
