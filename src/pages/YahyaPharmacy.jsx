@@ -988,26 +988,47 @@ export default function InventoryPage({ selectedPharmacy = "old" }) {
     setShowScanner(false);
 
     const qrCode = normalizeQr(decodedText);
-
     if (!qrCode) return;
 
     if (scanTarget === "search") {
-      const matches = medicines.filter(
+      const codeLower = qrCode.toLowerCase();
+
+      // 1) مطابقة تامة بعد trim
+      let matches = medicines.filter(
         (m) =>
           !m.deleted &&
           getMedicinePharmacy(m) === selectedPharmacy &&
-          normalizeQr(m.qrCode) === qrCode,
+          normalizeQr(m.qrCode).toLowerCase() === codeLower,
       );
 
+      // 2) لو ما في تطابق تام: بحث يحتوي الكود (زي الكتابة في البحث)
+      if (matches.length === 0) {
+        matches = medicines.filter(
+          (m) =>
+            !m.deleted &&
+            getMedicinePharmacy(m) === selectedPharmacy &&
+            normalizeQr(m.qrCode).toLowerCase().includes(codeLower),
+        );
+      }
+
+      // عشان النتائج ما تنحجب بفلتر الموقع
+      setLocationFilter("All");
+      setFilterType("All");
+      setCompanyFilter("All");
+
       if (matches.length === 1) {
-        // QR موجود لدواء واحد فقط
+        setSearch(matches[0].name);
         setDetailMed(matches[0]);
       } else if (matches.length > 1) {
-        // نفس QR موجود في أكثر من Location
+        setSearch(qrCode);
         setQrMatches(matches);
       } else {
+        // حط الكود في البحث عشان تشوف إذا في نتائج بالاسم/الكود
         setSearch(qrCode);
-        alert("No medicine found with this QR Code");
+        window.alert(
+          "No medicine with this barcode in this pharmacy.\n\n" +
+            "If you just added it, open Edit and confirm the QR field is saved.",
+        );
       }
     } else if (scanTarget === "add") {
       setScannedQr(qrCode);
@@ -1162,11 +1183,10 @@ export default function InventoryPage({ selectedPharmacy = "old" }) {
     const result = medicines.filter((m) => {
       if (m.deleted) return false;
 
-      // المطابقة بالاسم أو بـ الـ QR Code
       const matchSearch =
+        !searchText ||
         m.name.toLowerCase().includes(searchText) ||
-        (m.qrCode && m.qrCode.toLowerCase().includes(searchText));
-
+        normalizeQr(m.qrCode).toLowerCase().includes(searchText);
       const matchType = filterType === "All" || m.type === filterType;
 
       const matchLocation =
