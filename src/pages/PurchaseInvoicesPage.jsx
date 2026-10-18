@@ -33,6 +33,7 @@ import {
   ReceiptLong as InvoiceIcon,
   Delete as DeleteIcon,
   Edit as EditIcon,
+  QrCodeScanner as QrCodeScannerIcon, // ← جديد
 } from "@mui/icons-material";
 import {
   getAllMedicines,
@@ -45,7 +46,7 @@ import {
   saveMedicineDB,
 } from "../db";
 import { syncMedicines } from "../sync";
-
+import QrScannerDialog from "../QrScanner.jsx";
 // ─── Theme (Premium light design system) ───────────────────────────────────────
 const theme = createTheme({
   palette: {
@@ -380,7 +381,7 @@ const filterMedicineOptions = (options, { inputValue }) => {
 };
 
 const PHARMACY_KEY = "old";
-
+const normalizeQr = (value) => String(value || "").trim();
 export default function PurchaseInvoicesPage() {
   // ── States ─────────────────────────────────────────────────────────────────
   // No sample invoices; data comes from the local database.
@@ -389,7 +390,8 @@ export default function PurchaseInvoicesPage() {
   const [newMedicineForm, setNewMedicineForm] = useState(null);
   const [newMedicineRowIndex, setNewMedicineRowIndex] = useState(null);
   const [newMedicineSaving, setNewMedicineSaving] = useState(false);
-
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scanRowIndex, setScanRowIndex] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
@@ -663,6 +665,45 @@ export default function PurchaseInvoicesPage() {
       items: prev.items.filter((_, i) => i !== index),
     }));
   };
+  const handleMedicineScan = (text) => {
+    setScannerOpen(false);
+    const code = normalizeQr(text);
+    const rowIndex = scanRowIndex;
+    setScanRowIndex(null);
+
+    if (!code || rowIndex == null) return;
+
+    const matches = medicines.filter((m) => normalizeQr(m.qrCode) === code);
+
+    if (matches.length === 1) {
+      const med = matches[0];
+      setInvoiceForm((prev) => {
+        const items = [...prev.items];
+        items[rowIndex] = {
+          ...items[rowIndex],
+          medicine: med,
+          searchText: med.name,
+          costPrice: String(med.costPrice ?? ""),
+          sellPrice: String(med.sellPrice ?? ""),
+        };
+        return { ...prev, items };
+      });
+      setNewMedicineForm(null);
+      setNewMedicineRowIndex(null);
+    } else if (matches.length > 1) {
+      setInvoiceForm((prev) => {
+        const items = [...prev.items];
+        items[rowIndex] = {
+          ...items[rowIndex],
+          medicine: null,
+          searchText: code,
+        };
+        return { ...prev, items };
+      });
+    } else {
+      window.alert("No medicine with this QR code in this pharmacy.");
+    }
+  };
 
   const startCreateMedicine = (rowIndex, typedName) => {
     const name = String(typedName || "").trim();
@@ -695,6 +736,7 @@ export default function PurchaseInvoicesPage() {
       sellPrice: "",
       company: "",
       expDate: "",
+      qrCode: "",
     });
   };
 
@@ -738,7 +780,19 @@ export default function PurchaseInvoicesPage() {
       setNewMedicineForm(null);
       return;
     }
+    const qrCode = normalizeQr(newMedicineForm.qrCode);
 
+    if (qrCode) {
+      const qrExists = medicines.find(
+        (medicine) => normalizeQr(medicine.qrCode) === qrCode,
+      );
+      if (qrExists) {
+        window.alert(
+          `QR code already used by "${qrExists.name}". Use another code or leave empty.`,
+        );
+        return;
+      }
+    }
     setNewMedicineSaving(true);
     try {
       // Stock starts at zero; invoice quantities are added when saved.
@@ -751,7 +805,7 @@ export default function PurchaseInvoicesPage() {
         displayed_qty: displayed,
         storage_qty: storage,
         stockUnits: displayed + storage,
-        qrCode: "",
+        qrCode,
         stripsPerBox: Number(newMedicineForm.stripsPerBox) || 0,
         pillsPerStrip: Number(newMedicineForm.pillsPerStrip) || 0,
         costPrice: Number(newMedicineForm.costPrice),
@@ -1730,94 +1784,116 @@ export default function PurchaseInvoicesPage() {
                   )}
                 </Box>
 
-                <Autocomplete
-                  fullWidth
-                  size="small"
-                  options={medicines}
-                  filterOptions={filterMedicineOptions}
-                  value={item.medicine || null}
-                  inputValue={item.searchText ?? item.medicine?.name ?? ""}
-                  onInputChange={(_, value, reason) => {
-                    const newItems = [...invoiceForm.items];
-                    newItems[idx] = { ...newItems[idx], searchText: value };
-                    if (reason === "input") newItems[idx].medicine = null;
-                    setInvoiceForm((prev) => ({ ...prev, items: newItems }));
-                  }}
-                  getOptionLabel={(option) => option?.name || ""}
-                  isOptionEqualToValue={(option, value) =>
-                    option.id === value.id
-                  }
-                  noOptionsText={
-                    item.searchText?.trim() ? (
-                      <Box sx={{ py: 0.5 }}>
-                        <Typography variant="body2" sx={{ mb: 1 }}>
-                          No medicine found with this name.
-                        </Typography>
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          onMouseDown={(event) => event.preventDefault()}
-                          onClick={() =>
-                            startCreateMedicine(idx, item.searchText)
-                          }
-                        >
-                          Would you like to create a new medicine with this
-                          name?
-                        </Button>
-                      </Box>
-                    ) : (
-                      "Start typing a medicine name"
-                    )
-                  }
-                  onChange={(_, val) => {
-                    const newItems = [...invoiceForm.items];
-                    newItems[idx] = {
-                      ...newItems[idx],
-                      medicine: val,
-                      searchText: val?.name || "",
-                      ...(val
-                        ? {
-                            costPrice: val.costPrice ?? "",
-                            sellPrice: val.sellPrice ?? "",
-                          }
-                        : {}),
-                    };
-                    setInvoiceForm({ ...invoiceForm, items: newItems });
-                  }}
-                  renderOption={(props, medicine) => {
-                    const { key, ...optionProps } = props;
-                    return (
-                      <li key={medicine.id} {...optionProps}>
-                        <Box sx={{ width: "100%", minWidth: 0 }}>
-                          <Typography sx={{ fontWeight: 700, fontSize: 13.5 }}>
-                            {medicine.name}
+                <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
+                  <Autocomplete
+                    fullWidth
+                    size="small"
+                    options={medicines}
+                    filterOptions={filterMedicineOptions}
+                    value={item.medicine || null}
+                    inputValue={item.searchText ?? item.medicine?.name ?? ""}
+                    onInputChange={(_, value, reason) => {
+                      const newItems = [...invoiceForm.items];
+                      newItems[idx] = { ...newItems[idx], searchText: value };
+                      if (reason === "input") newItems[idx].medicine = null;
+                      setInvoiceForm((prev) => ({ ...prev, items: newItems }));
+                    }}
+                    getOptionLabel={(option) => option?.name || ""}
+                    isOptionEqualToValue={(option, value) =>
+                      option.id === value.id
+                    }
+                    noOptionsText={
+                      item.searchText?.trim() ? (
+                        <Box sx={{ py: 0.5 }}>
+                          <Typography variant="body2" sx={{ mb: 1 }}>
+                            No medicine found with this name.
                           </Typography>
-                          <Typography
-                            variant="caption"
-                            sx={{ color: "text.secondary", display: "block" }}
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() =>
+                              startCreateMedicine(idx, item.searchText)
+                            }
                           >
-                            {[
-                              medicine.type,
-                              medicine.company,
-                              medicine.location,
-                              medicine.qrCode,
-                            ]
-                              .filter(Boolean)
-                              .join(" · ")}
-                          </Typography>
+                            Would you like to create a new medicine with this
+                            name?
+                          </Button>
                         </Box>
-                      </li>
-                    );
-                  }}
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      label="Search medicines"
-                      placeholder="Enter medicine name"
-                      size="small"
-                    />
-                  )}
-                />
+                      ) : (
+                        "Start typing a medicine name"
+                      )
+                    }
+                    onChange={(_, val) => {
+                      const newItems = [...invoiceForm.items];
+                      newItems[idx] = {
+                        ...newItems[idx],
+                        medicine: val,
+                        searchText: val?.name || "",
+                        ...(val
+                          ? {
+                              costPrice: val.costPrice ?? "",
+                              sellPrice: val.sellPrice ?? "",
+                            }
+                          : {}),
+                      };
+                      setInvoiceForm({ ...invoiceForm, items: newItems });
+                    }}
+                    renderOption={(props, medicine) => {
+                      const { key, ...optionProps } = props;
+                      return (
+                        <li key={medicine.id} {...optionProps}>
+                          <Box sx={{ width: "100%", minWidth: 0 }}>
+                            <Typography
+                              sx={{ fontWeight: 700, fontSize: 13.5 }}
+                            >
+                              {medicine.name}
+                            </Typography>
+                            <Typography
+                              variant="caption"
+                              sx={{ color: "text.secondary", display: "block" }}
+                            >
+                              {[
+                                medicine.type,
+                                medicine.company,
+                                medicine.location,
+                                medicine.qrCode,
+                              ]
+                                .filter(Boolean)
+                                .join(" · ")}
+                            </Typography>
+                          </Box>
+                        </li>
+                      );
+                    }}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        label="Search medicines"
+                        placeholder="Enter medicine name"
+                        size="small"
+                      />
+                    )}
+                  />
+                  <IconButton
+                    color="primary"
+                    aria-label="Scan medicine QR"
+                    onClick={() => {
+                      setScanRowIndex(idx);
+                      setScannerOpen(true);
+                    }}
+                    sx={{
+                      bgcolor: "rgba(59,91,255,0.08)",
+                      borderRadius: "12px",
+                      p: 1,
+                      mt: 0.25,
+                      flexShrink: 0,
+                      "&:hover": { bgcolor: "rgba(59,91,255,0.14)" },
+                    }}
+                  >
+                    <QrCodeScannerIcon />
+                  </IconButton>
+                </Box>
 
                 {newMedicineForm && newMedicineRowIndex === idx && (
                   <Box
@@ -1886,6 +1962,16 @@ export default function PurchaseInvoicesPage() {
                         onChange={(e) =>
                           updateNewMedicineField("costPrice", e.target.value)
                         }
+                      />
+                      <TextField
+                        size="small"
+                        label="QR / Barcode"
+                        value={newMedicineForm.qrCode || ""}
+                        onChange={(e) =>
+                          updateNewMedicineField("qrCode", e.target.value)
+                        }
+                        placeholder="Optional"
+                        fullWidth
                       />
                       <TextField
                         size="small"
@@ -2505,6 +2591,14 @@ export default function PurchaseInvoicesPage() {
           </DialogActions>
         </Dialog>
       </Box>
+      <QrScannerDialog
+        open={scannerOpen}
+        onClose={() => {
+          setScannerOpen(false);
+          setScanRowIndex(null);
+        }}
+        onScan={handleMedicineScan}
+      />
     </ThemeProvider>
   );
 }

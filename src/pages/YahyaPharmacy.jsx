@@ -993,7 +993,10 @@ export default function InventoryPage({ selectedPharmacy = "old" }) {
 
     if (scanTarget === "search") {
       const matches = medicines.filter(
-        (m) => !m.deleted && normalizeQr(m.qrCode) === qrCode,
+        (m) =>
+          !m.deleted &&
+          getMedicinePharmacy(m) === selectedPharmacy &&
+          normalizeQr(m.qrCode) === qrCode,
       );
 
       if (matches.length === 1) {
@@ -1074,6 +1077,7 @@ export default function InventoryPage({ selectedPharmacy = "old" }) {
   };
 
   const [sortDirection, setSortDirection] = useState("asc");
+  const [sortBy, setSortBy] = useState("name");
   const LOCATION_FILTERS = ["All", "معروض", "مخزون"];
   const companyFilters = useMemo(() => {
     const companies = medicines
@@ -1178,12 +1182,36 @@ export default function InventoryPage({ selectedPharmacy = "old" }) {
       return matchSearch && matchType && matchLocation && matchCompany;
     });
     return result.sort((a, b) => {
-      const nameA = String(a.name || "").toLocaleLowerCase("ar");
-      const nameB = String(b.name || "").toLocaleLowerCase("ar");
-      if (sortDirection === "desc") {
-        return nameB.localeCompare(nameA, "ar");
+      let comparison = 0;
+
+      if (sortBy === "price") {
+        comparison = (Number(a.sellPrice) || 0) - (Number(b.sellPrice) || 0);
+      } else if (sortBy === "quantity") {
+        const getBoxQuantity = (medicine) => {
+          const totalUnits =
+            (Number(medicine.displayed_qty) || 0) +
+            (Number(medicine.storage_qty) || 0);
+          const isStripType = ["Tablets", "Ampoule", "Suppository"].includes(
+            medicine.type,
+          );
+
+          if (!isStripType) return totalUnits;
+
+          const unitsPerBox =
+            (Number(medicine.stripsPerBox) || 1) *
+            (Number(medicine.pillsPerStrip) || 1);
+
+          return totalUnits / unitsPerBox;
+        };
+
+        comparison = getBoxQuantity(a) - getBoxQuantity(b);
+      } else {
+        const nameA = String(a.name || "").toLocaleLowerCase("ar");
+        const nameB = String(b.name || "").toLocaleLowerCase("ar");
+        comparison = nameA.localeCompare(nameB, "ar");
       }
-      return nameA.localeCompare(nameB, "ar");
+
+      return sortDirection === "desc" ? -comparison : comparison;
     });
   }, [
     medicines,
@@ -1192,6 +1220,7 @@ export default function InventoryPage({ selectedPharmacy = "old" }) {
     locationFilter,
     companyFilter,
     sortDirection,
+    sortBy,
   ]);
   const totals = useMemo(() => {
     let totalCost = 0;
@@ -1432,7 +1461,15 @@ export default function InventoryPage({ selectedPharmacy = "old" }) {
           </Box>
 
           {/* Filter */}
-          <Box sx={{ pb: 2, display: "flex", gap: 1, alignItems: "center" }}>
+          <Box
+            sx={{
+              pb: 2,
+              display: "flex",
+              gap: 1,
+              alignItems: "center",
+              flexWrap: "wrap",
+            }}
+          >
             <FormControl fullWidth size="small">
               <InputLabel>Location</InputLabel>
 
@@ -1507,9 +1544,16 @@ export default function InventoryPage({ selectedPharmacy = "old" }) {
             )}
             <Button
               variant="outlined"
-              onClick={() =>
-                setSortDirection((prev) => (prev === "desc" ? "asc" : "desc"))
-              }
+              onClick={() => {
+                if (sortBy !== "name") {
+                  setSortBy("name");
+                  setSortDirection("asc");
+                } else {
+                  setSortDirection((prev) =>
+                    prev === "desc" ? "asc" : "desc",
+                  );
+                }
+              }}
               startIcon={<Sort sx={{ fontSize: 14 }} />}
               endIcon={
                 sortDirection === "desc" ? (
@@ -1533,7 +1577,61 @@ export default function InventoryPage({ selectedPharmacy = "old" }) {
                   bgcolor: "#F8FAFF",
                 },
               }}
-            ></Button>
+            >
+              الاسم
+            </Button>
+            <Button
+              variant={sortBy === "price" ? "contained" : "outlined"}
+              onClick={() => {
+                if (sortBy === "price") {
+                  setSortDirection((prev) =>
+                    prev === "desc" ? "asc" : "desc",
+                  );
+                } else {
+                  setSortBy("price");
+                  setSortDirection("asc");
+                }
+              }}
+              startIcon={<MoneyIcon sx={{ fontSize: 14 }} />}
+              sx={{
+                whiteSpace: "nowrap",
+                borderRadius: "14px",
+                height: "40px",
+                px: 1,
+                fontSize: 12,
+              }}
+            >
+              السعر{" "}
+              {sortBy === "price" ? (sortDirection === "asc" ? "↑" : "↓") : ""}
+            </Button>
+            <Button
+              variant={sortBy === "quantity" ? "contained" : "outlined"}
+              onClick={() => {
+                if (sortBy === "quantity") {
+                  setSortDirection((prev) =>
+                    prev === "desc" ? "asc" : "desc",
+                  );
+                } else {
+                  setSortBy("quantity");
+                  setSortDirection("asc");
+                }
+              }}
+              startIcon={<InventoryIcon sx={{ fontSize: 14 }} />}
+              sx={{
+                whiteSpace: "nowrap",
+                borderRadius: "14px",
+                height: "40px",
+                px: 1,
+                fontSize: 12,
+              }}
+            >
+              الكمية{" "}
+              {sortBy === "quantity"
+                ? sortDirection === "asc"
+                  ? "↑"
+                  : "↓"
+                : ""}
+            </Button>
           </Box>
 
           <Box
