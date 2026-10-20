@@ -1484,7 +1484,21 @@ function AddSaleDialog({
 
   const isApp = paymentType === "Application";
   const accounts = receiver ? getAccountsForReceiver(receiver) : [];
+  // Auto-select receiver + destination based on transfer source
+  const handleTransferFromChange = (value) => {
+    setTransferFrom(value);
 
+    if (value === "Jawwal Pay wallet") {
+      setReceiver("Yaser");
+      setDestination("Jawwal Pay");
+    } else if (value === "PalPay wallet") {
+      setReceiver("Yaser");
+      setDestination("PalPay");
+    } else if (value === "Bank of Palestine") {
+      setReceiver("Asil");
+      setDestination("Bank of Palestine");
+    }
+  };
   const handleReceiver = (r) => {
     const next = receiver === r ? "" : r;
     setReceiver(next);
@@ -1742,8 +1756,7 @@ function AddSaleDialog({
                   <Select
                     value={transferFrom}
                     label="Transfer from"
-                    onChange={(e) => setTransferFrom(e.target.value)}
-                    sx={selectSx}
+                                        onChange={(e) => handleTransferFromChange(e.target.value)}  sx={selectSx}
                   >
                     {TRANSFER_SOURCES.map((source) => (
                       <MenuItem key={source} value={source}>
