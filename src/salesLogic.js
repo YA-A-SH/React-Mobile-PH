@@ -10,14 +10,14 @@ export const TRANSFER_SOURCES = [
   "Jawwal Pay wallet",
 ];
 
-export const RECEIVERS = ["Asil", "Mohammed", "Fatma"];
+export const RECEIVERS = ["Asil","Yaser", "Mohammed", "Fatma"];
 // Order used by the Receiver *filter* (as requested)
-export const RECEIVER_FILTER_OPTIONS = ["Mohammed", "Asil", "Fatma"];
-
+export const RECEIVER_FILTER_OPTIONS = ["Mohammed", "Asil", "Fatma", "Yaser"];
 export const RECEIVER_ACCOUNTS = {
   Asil: ["Jawwal Pay", "Bank of Palestine"],
   Mohammed: ["Jawwal Pay", "PalPay", "Bank of Palestine"],
-  Fatma: ["PalPay"],
+  Fatma: ["PalPay"], 
+  Yaser: ["Jawwal Pay", "PalPay"],
 };
 
 export const ALL_ACCOUNTS = ["Jawwal Pay", "PalPay", "Bank of Palestine"];
