@@ -1435,49 +1435,62 @@ export default function InventoryPage({ selectedPharmacy = "old" }) {
               mb: 1,
             }}
           >
-            <TextField
-              fullWidth
+         
+<TextField
+  fullWidth
+  size="small"
+  placeholder="Search by medicine name or QR..."
+  value={search}
+  onChange={(e) => setSearch(e.target.value)}
+  slotProps={{
+    input: {
+      endAdornment: (
+        <InputAdornment position="end">
+          {search && (
+            <IconButton
               size="small"
-              placeholder="Search by medicine name or QR..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              slotProps={{
-                input: {
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <IconButton
-                        edge="end"
-                        onClick={() => {
-                          setScanTarget("search");
-                          setShowScanner(true);
-                        }}
-                        title="Scan Medicine QR"
-                        sx={{
-                          color: "#2563EB",
-                          bgcolor: "#EEF4FF",
-                          borderRadius: "10px",
-                        }} // لون ذهبي متناسق مع تصميمك
-                      >
-                        <QrCodeScannerIcon />
-                      </IconButton>
-                    </InputAdornment>
-                  ),
-                },
-              }}
-              sx={{
-                "& .MuiOutlinedInput-root": {
-                  borderRadius: "15px",
-                  bgcolor: "#FFFFFF",
-                  boxShadow: "0 7px 24px rgba(15,23,42,0.055)",
-                  "& fieldset": { borderColor: "#E2E8F0" },
-                  "&:hover fieldset": { borderColor: "#C7D2E2" },
-                  "&.Mui-focused fieldset": {
-                    borderColor: "#2563EB",
-                    borderWidth: 1.5,
-                  },
-                },
-              }}
-            />
+              onClick={() => setSearch("")}
+              aria-label="Clear search"
+              edge="end"
+            >
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          )}
+
+          <IconButton
+            edge="end"
+            onClick={() => {
+              setScanTarget("search");
+              setShowScanner(true);
+            }}
+            title="Scan Medicine QR"
+            sx={{
+              color: "#2563EB",
+              bgcolor: "#EEF4FF",
+              borderRadius: "10px",
+            }}
+          >
+            <QrCodeScannerIcon />
+          </IconButton>
+        </InputAdornment>
+      ),
+    },
+  }}
+  sx={{
+    "& .MuiOutlinedInput-root": {
+      borderRadius: "15px",
+      bgcolor: "#FFFFFF",
+      boxShadow: "0 7px 24px rgba(15,23,42,0.055)",
+      "& fieldset": { borderColor: "#E2E8F0" },
+      "&:hover fieldset": { borderColor: "#C7D2E2" },
+      "&.Mui-focused fieldset": {
+        borderColor: "#2563EB",
+        borderWidth: 1.5,
+      },
+    },
+  }}
+/>
+
           </Box>
 
           {/* Filter */}
